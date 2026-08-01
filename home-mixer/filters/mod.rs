@@ -13,6 +13,7 @@ pub mod previously_seen_posts_filter;
 pub mod previously_served_posts_filter;
 pub mod retweet_deduplication_filter;
 pub mod self_tweet_filter;
+pub mod suppressed_authors_filter;
 pub mod template_spam_filter;
 pub mod topic_ids_filter;
 pub mod vf_filter;

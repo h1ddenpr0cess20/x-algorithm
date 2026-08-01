@@ -58,6 +58,7 @@ use crate::filters::previously_seen_posts_filter::PreviouslySeenPostsFilter;
 use crate::filters::previously_served_posts_filter::PreviouslyServedPostsFilter;
 use crate::filters::retweet_deduplication_filter::RetweetDeduplicationFilter;
 use crate::filters::self_tweet_filter::SelfTweetFilter;
+use crate::filters::suppressed_authors_filter::SuppressedAuthorsFilter;
 use crate::filters::template_spam_filter::TemplateSpamFilter;
 use crate::filters::topic_ids_filter::TopicIdsFilter;
 use crate::filters::vf_filter::VFFilter;
@@ -284,6 +285,7 @@ impl PhoenixCandidatePipeline {
             Box::new(PreviouslyServedPostsFilter),
             Box::new(MutedKeywordFilter::new()),
             Box::new(AuthorSocialgraphFilter),
+            Box::new(SuppressedAuthorsFilter),
             Box::new(VideoFilter),
             Box::new(TemplateSpamFilter),
             Box::new(TopicIdsFilter),
