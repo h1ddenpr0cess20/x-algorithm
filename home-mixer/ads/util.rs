@@ -7,13 +7,20 @@ use xai_stats_receiver::global_stats_receiver;
 
 static TWEET_TOKENIZER: LazyLock<TweetTokenizer> = LazyLock::new(TweetTokenizer::new);
 
-pub(crate) const MIN_POSTS_FOR_ADS: usize = 5;
+/// Floor on how many posts sit between two ads, whatever the ad server asks for. The requested
+/// spacing arrives from outside this service and used to be taken as given, which set the feed's
+/// ad load by a number nobody here chose. This is the number this service chooses: ads may be
+/// spaced further apart than this, never closer.
+pub(crate) const MIN_ORGANIC_RUN: usize = 6;
+
+/// A response too short to hold one ad at the floor spacing carries none.
+pub(crate) const MIN_POSTS_FOR_ADS: usize = MIN_ORGANIC_RUN + 1;
 
 pub(crate) const MIN_REQUESTED_GAP: usize = 3;
 
 pub(crate) const DEFAULT_SPACING: AdSpacing = AdSpacing {
-    requested: 3,
-    min: 2,
+    requested: MIN_ORGANIC_RUN,
+    min: MIN_ORGANIC_RUN.div_ceil(2),
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,10 +63,13 @@ pub(crate) fn compute_spacing(ads: &[AdIndexInfo]) -> AdSpacing {
         .min();
 
     match min_diff {
-        Some(requested) if requested >= MIN_REQUESTED_GAP => AdSpacing {
-            requested,
-            min: requested.div_ceil(2),
-        },
+        Some(requested) if requested >= MIN_REQUESTED_GAP => {
+            let requested = requested.max(MIN_ORGANIC_RUN);
+            AdSpacing {
+                requested,
+                min: requested.div_ceil(2),
+            }
+        }
         _ => DEFAULT_SPACING,
     }
 }
@@ -224,5 +234,69 @@ pub(crate) fn record_ad_risk_stats(ads: &[AdIndexInfo]) {
             .unwrap_or(BrandSafetyRiskLevel::BsrUnknown);
 
         receiver.incr(RISK_METRIC, &[("risk", risk_level.as_str_name())], 1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        AdSpacing, DEFAULT_SPACING, MIN_ORGANIC_RUN, MIN_POSTS_FOR_ADS, MIN_REQUESTED_GAP,
+        compute_spacing,
+    };
+    use xai_recsys_proto::AdIndexInfo;
+
+    fn requesting(positions: &[i32]) -> Vec<AdIndexInfo> {
+        positions
+            .iter()
+            .map(|&insert_position| AdIndexInfo {
+                insert_position,
+                ..Default::default()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_single_ad_carries_the_default_spacing() {
+        assert_eq!(compute_spacing(&requesting(&[2])), DEFAULT_SPACING);
+    }
+
+    #[test]
+    fn a_tighter_request_than_the_floor_is_raised_to_it() {
+        // The ad server asking for one every three posts gets one every six.
+        let spacing = compute_spacing(&requesting(&[3, 6, 9, 12]));
+
+        assert_eq!(spacing.requested, MIN_ORGANIC_RUN);
+    }
+
+    #[test]
+    fn a_request_wider_than_the_floor_is_left_alone() {
+        let spacing = compute_spacing(&requesting(&[4, 14, 24]));
+
+        assert_eq!(
+            spacing,
+            AdSpacing {
+                requested: 10,
+                min: 5
+            }
+        );
+    }
+
+    #[test]
+    fn an_incoherent_request_falls_back_to_the_default() {
+        // Positions closer together than MIN_REQUESTED_GAP are not a spacing the server meant.
+        let spacing = compute_spacing(&requesting(&[4, 5]));
+
+        assert!(1 < MIN_REQUESTED_GAP);
+        assert_eq!(spacing, DEFAULT_SPACING);
+    }
+
+    #[test]
+    fn the_default_spacing_sits_at_the_floor() {
+        const { assert!(DEFAULT_SPACING.requested == MIN_ORGANIC_RUN) };
+    }
+
+    #[test]
+    fn a_response_that_cannot_hold_an_ad_at_the_floor_carries_none() {
+        const { assert!(MIN_POSTS_FOR_ADS > MIN_ORGANIC_RUN) };
     }
 }
