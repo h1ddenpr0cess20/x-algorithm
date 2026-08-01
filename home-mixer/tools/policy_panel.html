@@ -520,6 +520,12 @@
       </section>
 
       <section class="bank">
+        <div class="bank-hd"><h2>Prediction</h2><span class="rule"></span></div>
+        <p class="bank-note">How much of the model's predicted-engagement spread survives into the order. The top of the batch keeps its score and everything below is drawn toward it, so the weights decide more and the tap prediction less. Order within the model's own ranking is untouched.</p>
+        <div class="knobs" id="bank-prediction"></div>
+      </section>
+
+      <section class="bank">
         <div class="bank-hd"><h2>Affiliation</h2><span class="rule"></span></div>
         <p class="bank-note">Posts from the X / xAI / Tesla / SpaceX roster in scorers/affiliated_authors.rs, and reposts of them. Deranked, not removed.</p>
         <div class="knobs" id="bank-affiliation"></div>
@@ -589,6 +595,7 @@
     nature:      1.4,
     history:     1.4,
     affiliated:  0.25,
+    spread:      0.5,
     elonCut:     0.5,
     elonRatio:   0.25
   };
@@ -612,6 +619,7 @@
     { key: "nature",     bank: "bank-category", label: "Nature",       min: 0,   max: 3,   step: 0.05, unit: "x" },
     { key: "history",    bank: "bank-category", label: "History",      min: 0,   max: 3,   step: 0.05, unit: "x" },
     { key: "affiliated", bank: "bank-affiliation", label: "Roster",    min: 0,   max: 2,   step: 0.05, unit: "x" },
+    { key: "spread",     bank: "bank-prediction", label: "Spread",     min: 0.05, max: 1,  step: 0.05, unit: "x" },
     { key: "elonCut",    bank: "bank-elon",     label: "Derank",       min: 0,   max: 2,   step: 0.05, unit: "x" },
     { key: "elonRatio",  bank: "bank-elon",     label: "Threshold",    min: 0,   max: 1,   step: 0.01, unit: "%" }
   ];
@@ -895,6 +903,13 @@
     return { weight: w, parts: parts };
   }
 
+  // Mirrors FeedPolicyScorer::damped_score. The batch top is the fixed point; everything below
+  // is drawn toward it, and the order the model gave is preserved.
+  function damp(score, reference) {
+    if (score <= 0 || reference <= 0) return score;
+    return reference * Math.pow(score / reference, state.spread);
+  }
+
   function elonRatiosFor(posts) {
     var counts = {}, out = {};
     posts.forEach(function (p) {
@@ -924,9 +939,10 @@
     });
 
     var ratios = elonRatiosFor(kept);
+    var reference = kept.reduce(function (m, p) { return Math.max(m, p.phoenix); }, 0);
     var scored = kept.map(function (p) {
       var r = weigh(p, ratios);
-      return { p: p, weight: r.weight, parts: r.parts, score: p.phoenix * r.weight };
+      return { p: p, weight: r.weight, parts: r.parts, score: damp(p.phoenix, reference) * r.weight };
     });
     scored.sort(function (a, b) { return b.score - a.score; });
 
@@ -1014,12 +1030,22 @@
       ["Removed", String(dropped.length)],
       ["In-network share", scored.length ? Math.round(100 * inNet / scored.length) + "%" : "—"],
       ["In-network in top 5", top5.length ? top5InNet + " / " + top5.length : "—"],
-      ["Boosted / cut", boosted + " / " + cut]
+      ["Boosted / cut", boosted + " / " + cut],
+      ["Prediction gap", predictionGap(scored)]
     ];
 
     statsEl.innerHTML = rows.map(function (r) {
       return '<div class="stat"><dt>' + r[0] + "</dt><dd>" + r[1] + "</dd></div>";
     }).join("");
+  }
+
+  // Top-to-bottom ratio of the model score across the batch, before and after the compression.
+  function predictionGap(scored) {
+    if (scored.length < 2) return "\u2014";
+    var phx = scored.map(function (r) { return r.p.phoenix; });
+    var hi = Math.max.apply(null, phx), lo = Math.min.apply(null, phx);
+    if (lo <= 0) return "\u2014";
+    return (hi / lo).toFixed(2) + "x \u2192 " + (damp(hi, hi) / damp(lo, hi)).toFixed(2) + "x";
   }
 
   function paintCode() {
@@ -1039,6 +1065,7 @@
       c("NATURE_WEIGHT_FACTOR", state.nature),
       c("HISTORY_WEIGHT_FACTOR", state.history),
       c("AFFILIATED_AUTHOR_WEIGHT_FACTOR", state.affiliated),
+      c("PREDICTED_ENGAGEMENT_SPREAD", state.spread),
       c("OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR", state.elonCut),
       c("ELON_MENTION_RATIO_THRESHOLD", state.elonRatio)
     ].join("\n");

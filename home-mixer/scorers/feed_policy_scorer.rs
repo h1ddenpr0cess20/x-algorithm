@@ -87,6 +87,17 @@ const HISTORY_PHRASES: [&str; 12] = [
 /// and a weight says that where a hard removal would overstate it.
 const AFFILIATED_AUTHOR_WEIGHT_FACTOR: f64 = 0.25;
 
+/// How much of the model's predicted-engagement spread survives into the final ordering.
+///
+/// The score arriving here is Phoenix's estimate of how likely this post is to be viewed, dwelled
+/// on, tapped or replied to — the feed's memory of what has held attention before, ours and
+/// everyone else's. At 1.0 that estimate decides almost everything, because its spread across a
+/// batch is far wider than any weight below. At 0.5 a post the model rates twice as likely to be
+/// engaged with arrives roughly 1.4x ahead instead of 2x, which leaves the ordering to the
+/// weights — network, topic, roster — rather than to the prediction. Order within the model's own
+/// ranking is untouched: this compresses distances, it does not reshuffle.
+const PREDICTED_ENGAGEMENT_SPREAD: f64 = 0.5;
+
 const HARD_NEWS_TOPIC_IDS: [i64; 7] = [
     XAI_NEWS,
     XAI_NATURAL_DISASTERS,
@@ -271,6 +282,28 @@ impl FeedPolicyScorer {
             .collect()
     }
 
+    /// The batch's best score, used as the fixed point of the compression: the top post keeps
+    /// what it had and everything below is drawn up toward it. Anchoring on the batch rather than
+    /// on a constant keeps this independent of whatever scale the ranker happens to emit.
+    fn batch_reference(candidates: &[PostCandidate]) -> Option<f64> {
+        candidates
+            .iter()
+            .filter_map(|candidate| candidate.score)
+            .filter(|score| *score > 0.0)
+            .reduce(f64::max)
+    }
+
+    /// Compress the distance between predicted-engagement scores, preserving their order. Scores
+    /// at or below zero are left alone: they already rank below everything positive, and the
+    /// compression is not defined there.
+    fn damped_score(score: f64, reference: f64) -> f64 {
+        if score <= 0.0 || reference <= 0.0 {
+            return score;
+        }
+
+        reference * (score / reference).powf(PREDICTED_ENGAGEMENT_SPREAD)
+    }
+
     fn policy_weight(candidate: &PostCandidate, elon_mention_ratio: Option<f64>) -> f64 {
         let news_weight = if Self::is_hard_news(candidate) {
             HARD_NEWS_WEIGHT_FACTOR
@@ -301,6 +334,7 @@ impl Scorer<ScoredPostsQuery, PostCandidate> for FeedPolicyScorer {
         candidates: &[PostCandidate],
     ) -> Vec<Result<PostCandidate, String>> {
         let elon_mention_ratios = Self::author_elon_mention_ratios(candidates);
+        let reference = Self::batch_reference(candidates);
 
         candidates
             .iter()
@@ -309,9 +343,11 @@ impl Scorer<ScoredPostsQuery, PostCandidate> for FeedPolicyScorer {
                     .get(&candidate.get_original_author_id())
                     .copied();
                 Ok(PostCandidate {
-                    score: candidate
-                        .score
-                        .map(|score| score * Self::policy_weight(candidate, elon_mention_ratio)),
+                    score: candidate.score.map(|score| {
+                        let damped = reference
+                            .map_or(score, |reference| Self::damped_score(score, reference));
+                        damped * Self::policy_weight(candidate, elon_mention_ratio)
+                    }),
                     ..Default::default()
                 })
             })
@@ -329,9 +365,9 @@ mod tests {
         AFFILIATED_AUTHOR_WEIGHT_FACTOR, ART_WEIGHT_FACTOR, ELON_MENTION_RATIO_THRESHOLD,
         FANDOM_WEIGHT_FACTOR, FeedPolicyScorer, HARD_NEWS_WEIGHT_FACTOR, HISTORY_WEIGHT_FACTOR,
         IN_NETWORK_WEIGHT_FACTOR, MUSIC_WEIGHT_FACTOR, NATURE_WEIGHT_FACTOR,
-        OUT_OF_NETWORK_WEIGHT_FACTOR, OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR, SPORTS_WEIGHT_FACTOR,
-        STEM_WEIGHT_FACTOR, XAI_ART, XAI_CELEBRITY, XAI_MUSIC, XAI_NATURE_OUTDOORS, XAI_NEWS,
-        XAI_SCIENCE,
+        OUT_OF_NETWORK_WEIGHT_FACTOR, OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR,
+        PREDICTED_ENGAGEMENT_SPREAD, SPORTS_WEIGHT_FACTOR, STEM_WEIGHT_FACTOR, XAI_ART,
+        XAI_CELEBRITY, XAI_MUSIC, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_SCIENCE,
     };
     use crate::models::candidate::PostCandidate;
     use crate::params::topics::{XAI_K_POP, XAI_NBA, XAI_PHOTOGRAPHY, XAI_ROCK, XAI_SOCCER};
@@ -660,6 +696,78 @@ mod tests {
             FeedPolicyScorer::policy_weight(&repost, None),
             IN_NETWORK_WEIGHT_FACTOR * AFFILIATED_AUTHOR_WEIGHT_FACTOR
         );
+    }
+
+    #[test]
+    fn the_top_of_the_batch_keeps_its_score() {
+        assert_eq!(FeedPolicyScorer::damped_score(2.0, 2.0), 2.0);
+    }
+
+    #[test]
+    fn the_batch_is_compressed_toward_its_top() {
+        // Half the top score comes back as 71% of it, not 50%.
+        let damped = FeedPolicyScorer::damped_score(1.0, 2.0);
+
+        assert!(damped > 1.0 && damped < 2.0);
+        assert!((damped - 2.0 * 0.5_f64.sqrt()).abs() < 1e-12);
+    }
+
+    #[test]
+    fn compression_preserves_the_models_own_order() {
+        let reference = 4.0;
+        let damped: Vec<f64> = [0.5, 1.0, 2.5, 4.0]
+            .into_iter()
+            .map(|score| FeedPolicyScorer::damped_score(score, reference))
+            .collect();
+
+        assert!(damped.windows(2).all(|pair| pair[0] < pair[1]));
+    }
+
+    #[test]
+    fn a_boost_can_now_outrank_a_stronger_prediction() {
+        // The point of the compression. Both posts are in-network; one is art, the other is what
+        // the model expects more engagement on. Undamped, the prediction wins on its own.
+        let reference = 1.6;
+        let art = FeedPolicyScorer::damped_score(1.0, reference) * ART_WEIGHT_FACTOR;
+        let predicted = FeedPolicyScorer::damped_score(1.6, reference);
+
+        assert!(1.0 * ART_WEIGHT_FACTOR < 1.6);
+        assert!(art > predicted);
+    }
+
+    #[test]
+    fn non_positive_scores_pass_through_untouched() {
+        assert_eq!(FeedPolicyScorer::damped_score(0.0, 2.0), 0.0);
+        assert_eq!(FeedPolicyScorer::damped_score(-0.5, 2.0), -0.5);
+        assert_eq!(FeedPolicyScorer::damped_score(1.0, 0.0), 1.0);
+    }
+
+    #[test]
+    fn the_batch_reference_is_the_best_positive_score() {
+        let candidates = [scored(Some(0.4)), scored(Some(1.9)), scored(None)];
+
+        assert_eq!(FeedPolicyScorer::batch_reference(&candidates), Some(1.9));
+    }
+
+    #[test]
+    fn a_batch_with_nothing_positive_has_no_reference() {
+        let candidates = [scored(Some(-1.0)), scored(Some(0.0)), scored(None)];
+
+        assert_eq!(FeedPolicyScorer::batch_reference(&candidates), None);
+    }
+
+    #[test]
+    fn the_spread_leaves_the_prediction_some_say() {
+        // 0 would flatten the batch onto one score and hand the whole ordering to the weights;
+        // above 1 would widen the prediction's lead instead of narrowing it.
+        const { assert!(PREDICTED_ENGAGEMENT_SPREAD > 0.0 && PREDICTED_ENGAGEMENT_SPREAD < 1.0) };
+    }
+
+    fn scored(score: Option<f64>) -> PostCandidate {
+        PostCandidate {
+            score,
+            ..Default::default()
+        }
     }
 
     #[test]
