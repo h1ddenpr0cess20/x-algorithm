@@ -515,8 +515,20 @@
 
       <section class="bank">
         <div class="bank-hd"><h2>Category</h2><span class="rule"></span></div>
-        <p class="bank-note">Multiplied together, so a post tagged both sports and fandom takes both cuts. Hard news stacks on top of everything.</p>
+        <p class="bank-note">Multiplied together, so a post tagged both sports and fandom takes both cuts. Hard news stacks on top of everything. Art, music, nature and history are one preference in four parts &mdash; a post spanning them takes the largest of the four, not their product. History is matched on vocabulary in the text, and stays off hard news.</p>
         <div class="knobs" id="bank-category"></div>
+      </section>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Prediction</h2><span class="rule"></span></div>
+        <p class="bank-note">How much of the model's predicted-engagement spread survives into the order. The top of the batch keeps its score and everything below is drawn toward it, so the weights decide more and the tap prediction less. Order within the model's own ranking is untouched.</p>
+        <div class="knobs" id="bank-prediction"></div>
+      </section>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Affiliation</h2><span class="rule"></span></div>
+        <p class="bank-note">Posts from accounts carrying an X / xAI / Tesla / SpaceX affiliate badge, and reposts of them. The badge is the organization's own statement of who belongs to it, so the set updates itself when someone leaves. Deranked, not removed.</p>
+        <div class="knobs" id="bank-affiliation"></div>
       </section>
 
       <section class="bank">
@@ -578,6 +590,12 @@
     stem:        1.25,
     sports:      0.6,
     fandom:      0.6,
+    art:         1.4,
+    music:       1.4,
+    nature:      1.4,
+    history:     1.4,
+    affiliated:  0.25,
+    spread:      0.5,
     elonCut:     0.5,
     elonRatio:   0.25
   };
@@ -596,6 +614,12 @@
     { key: "stem",       bank: "bank-category", label: "STEM",         min: 0,   max: 3,   step: 0.05, unit: "x" },
     { key: "sports",     bank: "bank-category", label: "Sports",       min: 0,   max: 2,   step: 0.05, unit: "x" },
     { key: "fandom",     bank: "bank-category", label: "Fandom",       min: 0,   max: 2,   step: 0.05, unit: "x" },
+    { key: "art",        bank: "bank-category", label: "Art",          min: 0,   max: 3,   step: 0.05, unit: "x" },
+    { key: "music",      bank: "bank-category", label: "Music",        min: 0,   max: 3,   step: 0.05, unit: "x" },
+    { key: "nature",     bank: "bank-category", label: "Nature",       min: 0,   max: 3,   step: 0.05, unit: "x" },
+    { key: "history",    bank: "bank-category", label: "History",      min: 0,   max: 3,   step: 0.05, unit: "x" },
+    { key: "affiliated", bank: "bank-affiliation", label: "Roster",    min: 0,   max: 2,   step: 0.05, unit: "x" },
+    { key: "spread",     bank: "bank-prediction", label: "Spread",     min: 0.05, max: 1,  step: 0.05, unit: "x" },
     { key: "elonCut",    bank: "bank-elon",     label: "Derank",       min: 0,   max: 2,   step: 0.05, unit: "x" },
     { key: "elonRatio",  bank: "bank-elon",     label: "Threshold",    min: 0,   max: 1,   step: 0.01, unit: "%" }
   ];
@@ -644,13 +668,40 @@
       topics: [], elonAuthor: true },
     { id: 14, author: "Kelp Forest Trust", handle: "kelptrust", inNet: true, phoenix: 0.39,
       text: "Third season of urchin removal and the canopy is back to 60% of the 2013 survey.",
-      topics: ["science"] }
+      topics: ["science"] },
+    { id: 15, author: "Ilse Rautio", handle: "ilserautio", inNet: true, phoenix: 0.31,
+      text: "Six months of drypoint plates from the same harbour, finally hung together.",
+      topics: ["art", "photography"] },
+    { id: 16, author: "Cellar Sessions", handle: "cellarsessions", inNet: false, phoenix: 0.36,
+      text: "Recorded the whole quartet in one take on a borrowed ribbon mic. No overdubs.",
+      topics: ["music", "jazz"] },
+    { id: 17, author: "Ridgeline Notes", handle: "ridgelinenotes", inNet: false, phoenix: 0.28,
+      text: "Fog sat in the valley until noon. Counted eleven elk on the far slope waiting it out.",
+      topics: ["nature"] },
+    { id: 18, author: "Dana Whitlock", handle: "danawhitlock", inNet: true, phoenix: 0.86,
+      text: "Static fire of the booster complete ahead of the next flight test.",
+      topics: ["space"], affiliated: true, badge: "spacex" },
+    { id: 19, author: "Nell Abara", handle: "nellabara", inNet: false, phoenix: 0.42,
+      text: "The comeback single is the first thing they have released that sounds like the demos.",
+      topics: ["music", "kpop"] },
+    { id: 20, author: "Harbour Records Office", handle: "harbourrecords", inNet: false, phoenix: 0.33,
+      text: "The 1794 excavation ledger lists every crate off the wharf. Two hands, forty years.",
+      topics: [], history: true },
+    { id: 21, author: "Frontline Wire", handle: "frontlinewire", inNet: false, phoenix: 0.74,
+      text: "Civil war fighting reached the capital overnight, according to two aid groups.",
+      topics: ["news"], history: true }
   ];
 
   var HARD_NEWS = ["news", "elections", "politics", "crime", "stocks", "disasters"];
   var STEM      = ["science", "space", "software", "ai", "robotics", "biotech", "education"];
   var SPORTS    = ["sports", "nba", "soccer", "nfl", "mlb", "tennis"];
   var FANDOM    = ["celebrity", "movies", "anime", "kpop", "memes", "streaming"];
+  // Roots and everything that rolls up to them, matching TopicIdExpansion::supertopic.
+  var ART       = ["art", "photography", "design", "digitalart"];
+  var MUSIC     = ["music", "pop", "kpop", "jpop", "rock", "jazz", "hiphop", "country", "electronic", "concerts"];
+  var NATURE    = ["nature"];
+  // History has no topic id in the taxonomy, so the scorer reads it off the post text. Sample
+  // posts carry the outcome of that match as `history` rather than repeating the vocabulary here.
 
   var state = {};
   var switchState = { fUnknown: true, fShortVideo: true, fRestricted: true, fBait: true };
@@ -826,12 +877,37 @@
     if (hasAny(p, SPORTS))    { w *= state.sports;   parts.push({ name: "sports",    v: state.sports }); }
     if (hasAny(p, FANDOM))    { w *= state.fandom;   parts.push({ name: "fandom",    v: state.fandom }); }
 
+    // The largest of the four, applied once, never below 1: mirrors
+    // FeedPolicyScorer::interest_weight, which folds the matching factors with max from 1.
+    var creative = { name: null, v: 1 };
+    [{ name: "art", list: ART, v: state.art },
+     { name: "music", list: MUSIC, v: state.music },
+     { name: "nature", list: NATURE, v: state.nature },
+     { name: "history", list: null, v: state.history, flag: p.history && !hasAny(p, HARD_NEWS) }]
+    .forEach(function (c) {
+      var hit = c.list ? hasAny(p, c.list) : c.flag;
+      if (hit && c.v > creative.v) creative = c;
+    });
+    if (creative.name) { w *= creative.v; parts.push({ name: creative.name, v: creative.v }); }
+
+    if (p.affiliated) {
+      w *= state.affiliated;
+      parts.push({ name: (p.badge || "affiliate") + " badge", v: state.affiliated });
+    }
+
     var r = elonRatios[p.handle];
     if (r !== undefined && r > state.elonRatio) {
       w *= state.elonCut;
       parts.push({ name: "overexposed", v: state.elonCut });
     }
     return { weight: w, parts: parts };
+  }
+
+  // Mirrors FeedPolicyScorer::damped_score. The batch top is the fixed point; everything below
+  // is drawn toward it, and the order the model gave is preserved.
+  function damp(score, reference) {
+    if (score <= 0 || reference <= 0) return score;
+    return reference * Math.pow(score / reference, state.spread);
   }
 
   function elonRatiosFor(posts) {
@@ -863,9 +939,10 @@
     });
 
     var ratios = elonRatiosFor(kept);
+    var reference = kept.reduce(function (m, p) { return Math.max(m, p.phoenix); }, 0);
     var scored = kept.map(function (p) {
       var r = weigh(p, ratios);
-      return { p: p, weight: r.weight, parts: r.parts, score: p.phoenix * r.weight };
+      return { p: p, weight: r.weight, parts: r.parts, score: damp(p.phoenix, reference) * r.weight };
     });
     scored.sort(function (a, b) { return b.score - a.score; });
 
@@ -953,12 +1030,22 @@
       ["Removed", String(dropped.length)],
       ["In-network share", scored.length ? Math.round(100 * inNet / scored.length) + "%" : "—"],
       ["In-network in top 5", top5.length ? top5InNet + " / " + top5.length : "—"],
-      ["Boosted / cut", boosted + " / " + cut]
+      ["Boosted / cut", boosted + " / " + cut],
+      ["Prediction gap", predictionGap(scored)]
     ];
 
     statsEl.innerHTML = rows.map(function (r) {
       return '<div class="stat"><dt>' + r[0] + "</dt><dd>" + r[1] + "</dd></div>";
     }).join("");
+  }
+
+  // Top-to-bottom ratio of the model score across the batch, before and after the compression.
+  function predictionGap(scored) {
+    if (scored.length < 2) return "\u2014";
+    var phx = scored.map(function (r) { return r.p.phoenix; });
+    var hi = Math.max.apply(null, phx), lo = Math.min.apply(null, phx);
+    if (lo <= 0) return "\u2014";
+    return (hi / lo).toFixed(2) + "x \u2192 " + (damp(hi, hi) / damp(lo, hi)).toFixed(2) + "x";
   }
 
   function paintCode() {
@@ -973,6 +1060,12 @@
       c("STEM_WEIGHT_FACTOR", state.stem),
       c("SPORTS_WEIGHT_FACTOR", state.sports),
       c("FANDOM_WEIGHT_FACTOR", state.fandom),
+      c("ART_WEIGHT_FACTOR", state.art),
+      c("MUSIC_WEIGHT_FACTOR", state.music),
+      c("NATURE_WEIGHT_FACTOR", state.nature),
+      c("HISTORY_WEIGHT_FACTOR", state.history),
+      c("AFFILIATED_AUTHOR_WEIGHT_FACTOR", state.affiliated),
+      c("PREDICTED_ENGAGEMENT_SPREAD", state.spread),
       c("OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR", state.elonCut),
       c("ELON_MENTION_RATIO_THRESHOLD", state.elonRatio)
     ].join("\n");

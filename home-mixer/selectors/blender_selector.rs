@@ -74,10 +74,26 @@ impl Selector<ScoredPostsQuery, FeedItem> for BlenderSelector {
     }
 }
 
+/// Prompts are injections — follow suggestions, upsells, nudges to turn something on. Every one
+/// the injection service returned used to be inserted above every post in the response, so a
+/// stack of them was the first thing in the feed. One per response, and never before the feed has
+/// shown some of what was asked for.
+const MAX_PROMPTS_PER_RESPONSE: usize = 1;
+const MIN_POSTS_BEFORE_PROMPT: usize = 3;
+
 fn insert_prompts(blended: &mut Vec<FeedItem>, prompts: Vec<Prompt>) {
-    for (i, prompt) in prompts.into_iter().enumerate() {
+    // Follows the who-to-follow pattern: the declared position is the slot, taken as a 1-based
+    // index, and it is only ever pushed later by the floor — never earlier.
+    let declared = PROMPTS_POSITION.max(1) as usize - 1;
+    let index = declared.max(MIN_POSTS_BEFORE_PROMPT);
+
+    for (offset, prompt) in prompts
+        .into_iter()
+        .take(MAX_PROMPTS_PER_RESPONSE)
+        .enumerate()
+    {
         blended.insert(
-            i,
+            (index + offset).min(blended.len()),
             FeedItem {
                 position: PROMPTS_POSITION,
                 item: Some(feed_item::Item::Prompt(prompt)),
@@ -160,5 +176,63 @@ fn partition_feed_items(items: Vec<FeedItem>) -> PartitionedFeedItems {
         wtf_modules,
         prompts,
         push_to_home,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MAX_PROMPTS_PER_RESPONSE, MIN_POSTS_BEFORE_PROMPT, insert_prompts};
+    use xai_home_mixer_proto::{FeedItem, Prompt, ScoredPost, feed_item};
+
+    fn posts(count: usize) -> Vec<FeedItem> {
+        (0..count)
+            .map(|i| FeedItem {
+                position: i as i32,
+                item: Some(feed_item::Item::Post(ScoredPost::default())),
+            })
+            .collect()
+    }
+
+    fn prompt_indices(blended: &[FeedItem]) -> Vec<usize> {
+        blended
+            .iter()
+            .enumerate()
+            .filter(|(_, item)| matches!(item.item, Some(feed_item::Item::Prompt(_))))
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    #[test]
+    fn only_one_prompt_reaches_the_response() {
+        let mut blended = posts(20);
+        insert_prompts(&mut blended, vec![Prompt::default(); 4]);
+
+        assert_eq!(prompt_indices(&blended).len(), MAX_PROMPTS_PER_RESPONSE);
+    }
+
+    #[test]
+    fn the_prompt_never_comes_before_the_first_posts() {
+        let mut blended = posts(20);
+        insert_prompts(&mut blended, vec![Prompt::default()]);
+
+        assert!(prompt_indices(&blended)[0] >= MIN_POSTS_BEFORE_PROMPT);
+    }
+
+    #[test]
+    fn a_response_shorter_than_the_lead_puts_the_prompt_last() {
+        let mut blended = posts(2);
+        insert_prompts(&mut blended, vec![Prompt::default()]);
+
+        assert_eq!(prompt_indices(&blended), vec![2]);
+        assert_eq!(blended.len(), 3);
+    }
+
+    #[test]
+    fn no_prompts_leaves_the_response_untouched() {
+        let mut blended = posts(5);
+        insert_prompts(&mut blended, vec![]);
+
+        assert!(prompt_indices(&blended).is_empty());
+        assert_eq!(blended.len(), 5);
     }
 }

@@ -32,6 +32,12 @@ pub struct PostCandidate {
     pub author_followers_count: Option<i32>,
     pub author_screen_name: Option<String>,
     pub retweeted_screen_name: Option<String>,
+    /// Handle of the organization whose affiliate badge the author carries, if any. Defaulted on
+    /// the way in so cache entries written before the field existed still deserialize.
+    #[serde(default)]
+    pub author_affiliate_handle: Option<String>,
+    #[serde(default)]
+    pub retweeted_affiliate_handle: Option<String>,
     pub visibility_reason: Option<vf::FilteredReason>,
     pub drop_ancillary_posts: Option<bool>,
     pub subscription_author_id: Option<u64>,

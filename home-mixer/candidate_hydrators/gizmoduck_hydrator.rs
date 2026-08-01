@@ -45,6 +45,8 @@ impl CachedHydrator<ScoredPostsQuery, PostCandidate> for GizmoduckCandidateHydra
             author_followers_count: hydrated.author_followers_count,
             author_screen_name: hydrated.author_screen_name.clone(),
             retweeted_screen_name: hydrated.retweeted_screen_name.clone(),
+            author_affiliate_handle: hydrated.author_affiliate_handle.clone(),
+            retweeted_affiliate_handle: hydrated.retweeted_affiliate_handle.clone(),
         }
     }
 
@@ -53,6 +55,8 @@ impl CachedHydrator<ScoredPostsQuery, PostCandidate> for GizmoduckCandidateHydra
             author_followers_count: value.author_followers_count,
             author_screen_name: value.author_screen_name,
             retweeted_screen_name: value.retweeted_screen_name,
+            author_affiliate_handle: value.author_affiliate_handle,
+            retweeted_affiliate_handle: value.retweeted_affiliate_handle,
             ..Default::default()
         }
     }
@@ -111,10 +115,23 @@ impl CachedHydrator<ScoredPostsQuery, PostCandidate> for GizmoduckCandidateHydra
                     let retweeted_screen_name: Option<String> =
                         retweet_profile.map(|x| x.screen_name.clone());
 
+                    // The badge the author's organization granted them, reduced to the parent
+                    // handle. Absent for accounts with no affiliation, which is most of them.
+                    let author_affiliate_handle: Option<String> = user
+                        .and_then(|user| user.user.as_ref())
+                        .and_then(|u| u.affiliate_label.as_ref())
+                        .and_then(|label| label.parent_handle());
+                    let retweeted_affiliate_handle: Option<String> = retweet_user
+                        .and_then(|user| user.user.as_ref())
+                        .and_then(|u| u.affiliate_label.as_ref())
+                        .and_then(|label| label.parent_handle());
+
                     Ok(PostCandidate {
                         author_followers_count,
                         author_screen_name,
                         retweeted_screen_name,
+                        author_affiliate_handle,
+                        retweeted_affiliate_handle,
                         ..Default::default()
                     })
                 }
@@ -130,6 +147,8 @@ impl CachedHydrator<ScoredPostsQuery, PostCandidate> for GizmoduckCandidateHydra
         candidate.author_followers_count = hydrated.author_followers_count;
         candidate.author_screen_name = hydrated.author_screen_name;
         candidate.retweeted_screen_name = hydrated.retweeted_screen_name;
+        candidate.author_affiliate_handle = hydrated.author_affiliate_handle;
+        candidate.retweeted_affiliate_handle = hydrated.retweeted_affiliate_handle;
     }
 }
 
@@ -144,4 +163,6 @@ pub struct GizmoduckCacheValue {
     pub author_followers_count: Option<i32>,
     pub author_screen_name: Option<String>,
     pub retweeted_screen_name: Option<String>,
+    pub author_affiliate_handle: Option<String>,
+    pub retweeted_affiliate_handle: Option<String>,
 }

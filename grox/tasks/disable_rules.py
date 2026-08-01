@@ -16,6 +16,22 @@ class DisableTaskRule(ABC):
         return cls.DISABLE_REASON
 
 
+class DisableTaskAlways(DisableTaskRule):
+    """Off everywhere, in every environment.
+
+    For work this service has decided not to do at all, as opposed to work that belongs to one
+    environment. A task carrying this rule stays in the tree, keeps its dependents wired, and
+    reports itself skipped - so re-enabling it is deleting one line, and reading the task tells
+    you it is off without cross-referencing a plan.
+    """
+
+    DISABLE_REASON = "Task is disabled unconditionally"
+
+    @classmethod
+    def should_disable(cls, ctx: TaskContext) -> bool:
+        return True
+
+
 class DisableTaskForLocal(DisableTaskRule):
     DISABLE_REASON = "Task is disabled for local mode"
 
