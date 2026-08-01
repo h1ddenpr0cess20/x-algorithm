@@ -1,6 +1,7 @@
 use crate::models::candidate::PostCandidate;
 use crate::models::query::ScoredPostsQuery;
 use crate::util::candidates_util::get_related_post_ids;
+use std::collections::HashSet;
 use xai_candidate_pipeline::filter::{Filter, FilterResult};
 
 pub struct PreviouslySeenPostsBackupFilter;
@@ -18,10 +19,13 @@ impl Filter<ScoredPostsQuery, PostCandidate> for PreviouslySeenPostsBackupFilter
             };
         }
 
+        // Built once instead of scanning the impressed id list per candidate.
+        let impressed_post_ids: HashSet<u64> = query.impressed_post_ids.iter().copied().collect();
+
         let (removed, kept): (Vec<_>, Vec<_>) = candidates.into_iter().partition(|c| {
             get_related_post_ids(c)
                 .iter()
-                .any(|id| query.impressed_post_ids.contains(id))
+                .any(|id| impressed_post_ids.contains(id))
         });
 
         FilterResult { kept, removed }

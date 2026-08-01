@@ -106,8 +106,11 @@ impl FeedQualityFilter {
             .collect::<Vec<_>>()
             .join(" ");
 
+        // Counted in characters, not bytes: String::len is a byte count, which made the same
+        // 40-character post pass in a multi-byte script and fail in a single-byte one.
+        let character_count = normalized.chars().count();
         let word_count = normalized.split_whitespace().count();
-        (normalized.len() >= MIN_TEMPLATE_CHARACTER_COUNT
+        (character_count >= MIN_TEMPLATE_CHARACTER_COUNT
             && word_count >= MIN_TEMPLATE_WORD_COUNT)
             .then_some(normalized)
     }
@@ -137,11 +140,11 @@ impl Filter<ScoredPostsQuery, PostCandidate> for FeedQualityFilter {
                 continue;
             }
 
-            if let Some(template) = Self::normalize_template(&candidate.tweet_text) {
-                if !seen_templates.insert(template) {
-                    removed.push(candidate);
-                    continue;
-                }
+            if let Some(template) = Self::normalize_template(&candidate.tweet_text)
+                && !seen_templates.insert(template)
+            {
+                removed.push(candidate);
+                continue;
             }
 
             kept.push(candidate);
@@ -153,7 +156,7 @@ impl Filter<ScoredPostsQuery, PostCandidate> for FeedQualityFilter {
 
 #[cfg(test)]
 mod tests {
-    use super::{FeedQualityFilter, MAX_SHORT_FORM_VIDEO_DURATION_MS};
+    use super::{FeedQualityFilter, MAX_SHORT_FORM_VIDEO_DURATION_MS, MIN_TEMPLATE_CHARACTER_COUNT};
     use crate::models::candidate::PostCandidate;
     use crate::models::query::ScoredPostsQuery;
     use xai_candidate_pipeline::filter::Filter;
@@ -235,6 +238,38 @@ mod tests {
         let result = FeedQualityFilter.filter(&ScoredPostsQuery::default(), vec![restricted]);
 
         assert!(result.kept.is_empty());
+        assert_eq!(result.removed.len(), 1);
+    }
+
+    #[test]
+    fn template_length_is_measured_in_characters_not_bytes() {
+        // Two identical Cyrillic posts of 26 characters but 44 bytes. A byte-based threshold
+        // treated them as long enough to dedupe, while the English equivalent of the same
+        // character length was left alone.
+        let text = "аб вг де жз ий кл мн оп рс";
+        assert_eq!(text.chars().count(), 26);
+        assert!(text.len() >= MIN_TEMPLATE_CHARACTER_COUNT);
+
+        let result = FeedQualityFilter.filter(
+            &ScoredPostsQuery::default(),
+            vec![candidate(1, text), candidate(2, text)],
+        );
+
+        assert_eq!(result.kept.len(), 2);
+        assert!(result.removed.is_empty());
+    }
+
+    #[test]
+    fn long_multibyte_templates_are_still_deduped() {
+        let text = "аб вг де жз ий кл мн оп рс ту фх цч шщ ыэ юя аб вг де жз ий";
+        assert!(text.chars().count() >= 40);
+
+        let result = FeedQualityFilter.filter(
+            &ScoredPostsQuery::default(),
+            vec![candidate(1, text), candidate(2, text)],
+        );
+
+        assert_eq!(result.kept.len(), 1);
         assert_eq!(result.removed.len(), 1);
     }
 

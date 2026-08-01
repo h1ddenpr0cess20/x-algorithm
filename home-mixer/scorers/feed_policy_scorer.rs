@@ -311,7 +311,9 @@ mod tests {
 
     #[test]
     fn stem_boost_is_smaller_than_the_hard_news_boost() {
-        assert!(STEM_WEIGHT_FACTOR > 1.0 && STEM_WEIGHT_FACTOR < HARD_NEWS_WEIGHT_FACTOR);
+        const {
+            assert!(STEM_WEIGHT_FACTOR > 1.0 && STEM_WEIGHT_FACTOR < HARD_NEWS_WEIGHT_FACTOR)
+        };
     }
 
     #[test]
