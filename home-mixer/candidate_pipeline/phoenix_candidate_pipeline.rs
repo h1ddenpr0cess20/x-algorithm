@@ -50,6 +50,7 @@ use crate::filters::author_socialgraph_filter::AuthorSocialgraphFilter;
 use crate::filters::core_data_hydration_filter::CoreDataHydrationFilter;
 use crate::filters::dedup_conversation_filter::DedupConversationFilter;
 use crate::filters::drop_duplicates_filter::DropDuplicatesFilter;
+use crate::filters::feed_quality_filter::FeedQualityFilter;
 use crate::filters::ineligible_subscription_filter::IneligibleSubscriptionFilter;
 use crate::filters::muted_keyword_filter::MutedKeywordFilter;
 use crate::filters::new_user_topic_ids_filter::NewUserTopicIdsFilter;
@@ -80,6 +81,7 @@ use crate::query_hydrators::scoring_sequence_query_hydrator::ScoringSequenceQuer
 use crate::query_hydrators::subscribed_user_ids_query_hydrator::SubscribedUserIdsQueryHydrator;
 use crate::query_hydrators::user_demographics_query_hydrator::UserDemographicsQueryHydrator;
 use crate::query_hydrators::user_inferred_gender_query_hydrator::UserInferredGenderQueryHydrator;
+use crate::scorers::feed_policy_scorer::FeedPolicyScorer;
 use crate::scorers::phoenix_scorer::PhoenixScorer;
 use crate::scorers::ranking_scorer::RankingScorer;
 use crate::scorers::vm_ranker::VMRanker;
@@ -219,6 +221,9 @@ impl PhoenixCandidatePipeline {
             Box::new(InferredGrokTopicsQueryHydrator {
                 strato_client: strato_client.clone(),
             }),
+            Box::new(ImpressedPostsQueryHydrator {
+                client: impressed_posts_client,
+            }),
             Box::new(ImpressionBloomFilterQueryHydrator {
                 client: impression_bloom_filter_client,
             }),
@@ -230,10 +235,6 @@ impl PhoenixCandidatePipeline {
                 user_inferred_gender_grpc_client,
             )),
         ];
-
-        let _impressed_posts_hydrator = ImpressedPostsQueryHydrator {
-            client: impressed_posts_client,
-        };
 
         let phoenix_source = Box::new(PhoenixSource {
             phoenix_retrieval_client: phoenix_retrieval_client.clone(),
@@ -284,6 +285,7 @@ impl PhoenixCandidatePipeline {
             Box::new(MutedKeywordFilter::new()),
             Box::new(AuthorSocialgraphFilter),
             Box::new(VideoFilter),
+            Box::new(FeedQualityFilter),
             Box::new(TopicIdsFilter),
             Box::new(NewUserTopicIdsFilter),
         ];
@@ -296,8 +298,9 @@ impl PhoenixCandidatePipeline {
         let vm_ranker = Box::new(VMRanker {
             client: vm_ranker_client,
         });
+        let feed_policy_scorer = Box::new(FeedPolicyScorer);
         let scorers: Vec<Box<dyn Scorer<ScoredPostsQuery, PostCandidate>>> =
-            vec![phoenix_scorer, ranking_scorer, vm_ranker];
+            vec![phoenix_scorer, ranking_scorer, vm_ranker, feed_policy_scorer];
 
         let selector = TopKScoreSelector;
 
@@ -769,4 +772,3 @@ impl CandidatePipeline<ScoredPostsQuery, PostCandidate> for PhoenixCandidatePipe
         params::RESULT_SIZE
     }
 }
-
