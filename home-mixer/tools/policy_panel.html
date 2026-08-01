@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Feed Policy Console</title>
+
+</head>
+<body>
+<style>
+  :root {
+    --panel:    #15181b;
+    --panel-2:  #1c2024;
+    --panel-3:  #23282d;
+    --well:     #101315;
+    --edge:     #2f363c;
+    --edge-2:   #3d464d;
+    --ink:      #e6eaed;
+    --ink-2:    #98a4ae;
+    --ink-3:    #626e78;
+    --accent:   #e8a33d;
+    --accent-d: #b87b23;
+    --boost:    #58bfa4;
+    --cut:      #de7355;
+    --shadow:   rgba(0,0,0,.5);
+    --sheen:    rgba(255,255,255,.06);
+
+    --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+
+    --r: 4px;
+    color-scheme: dark;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --panel:    #e8e7e2;
+      --panel-2:  #f2f1ed;
+      --panel-3:  #fbfaf7;
+      --well:     #dbd9d3;
+      --edge:     #c7c5be;
+      --edge-2:   #b0ada5;
+      --ink:      #22262a;
+      --ink-2:    #5d646b;
+      --ink-3:    #868d94;
+      --accent:   #b0741a;
+      --accent-d: #8a5a12;
+      --boost:    #2f8a72;
+      --cut:      #b64f30;
+      --shadow:   rgba(90,86,78,.22);
+      --sheen:    rgba(255,255,255,.7);
+      color-scheme: light;
+    }
+  }
+
+  :root[data-theme="light"] {
+    --panel:    #e8e7e2;
+    --panel-2:  #f2f1ed;
+    --panel-3:  #fbfaf7;
+    --well:     #dbd9d3;
+    --edge:     #c7c5be;
+    --edge-2:   #b0ada5;
+    --ink:      #22262a;
+    --ink-2:    #5d646b;
+    --ink-3:    #868d94;
+    --accent:   #b0741a;
+    --accent-d: #8a5a12;
+    --boost:    #2f8a72;
+    --cut:      #b64f30;
+    --shadow:   rgba(90,86,78,.22);
+    --sheen:    rgba(255,255,255,.7);
+    color-scheme: light;
+  }
+
+  :root[data-theme="dark"] {
+    --panel:    #15181b;
+    --panel-2:  #1c2024;
+    --panel-3:  #23282d;
+    --well:     #101315;
+    --edge:     #2f363c;
+    --edge-2:   #3d464d;
+    --ink:      #e6eaed;
+    --ink-2:    #98a4ae;
+    --ink-3:    #626e78;
+    --accent:   #e8a33d;
+    --accent-d: #b87b23;
+    --boost:    #58bfa4;
+    --cut:      #de7355;
+    --shadow:   rgba(0,0,0,.5);
+    --sheen:    rgba(255,255,255,.06);
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    background: var(--panel);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 22px 20px 56px;
+  }
+
+  /* ---- nameplate ---- */
+
+  .plate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 10px 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--edge);
+    margin-bottom: 22px;
+  }
+  .plate h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .22em;
+    text-transform: uppercase;
+  }
+  .plate .rule {
+    flex: 1 1 40px;
+    height: 1px;
+    background: repeating-linear-gradient(90deg, var(--edge) 0 4px, transparent 4px 8px);
+    align-self: center;
+  }
+  .plate .sub {
+    font-size: 11px;
+    letter-spacing: .1em;
+    color: var(--ink-3);
+    text-transform: uppercase;
+  }
+
+  /* ---- layout ---- */
+
+  .desk {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 940px) {
+    .desk { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  .bank {
+    background: var(--panel-2);
+    border: 1px solid var(--edge);
+    border-radius: var(--r);
+    box-shadow: inset 0 1px 0 var(--sheen), 0 1px 3px var(--shadow);
+    padding: 16px 16px 20px;
+    margin-bottom: 18px;
+  }
+  .bank + .bank { margin-top: 0; }
+
+  .bank-hd {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .bank-hd h2 {
+    margin: 0;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .2em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    white-space: nowrap;
+  }
+  .bank-hd .rule {
+    flex: 1;
+    height: 1px;
+    background: var(--edge);
+  }
+  .bank-note {
+    margin: -8px 0 16px;
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: var(--ink-3);
+    max-width: 62ch;
+  }
+
+  .knobs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 104px);
+    justify-content: start;
+    gap: 20px 14px;
+  }
+
+  /* ---- knob ---- */
+
+  .knob {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 2px 2px;
+    border: 1px solid transparent;
+    border-radius: var(--r);
+    cursor: ns-resize;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .knob:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent);
+  }
+  .knob svg { display: block; overflow: visible; }
+
+  .knob .cap-face { fill: var(--panel-3); stroke: var(--edge-2); stroke-width: 1; }
+  .knob .cap-in   { fill: none; stroke: var(--sheen); stroke-width: 1; }
+  .knob .track    { fill: none; stroke: var(--well); stroke-width: 4; stroke-linecap: round; }
+  .knob .arc      { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
+  .knob .notch    { stroke: var(--accent); stroke-width: 2.5; stroke-linecap: round; }
+  .knob .tick     { stroke: var(--edge-2); stroke-width: 1; }
+
+  .knob-read {
+    font-size: 14px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .02em;
+    line-height: 1;
+  }
+  .knob-read.is-boost { color: var(--boost); }
+  .knob-read.is-cut   { color: var(--cut); }
+  .knob-read.is-unity { color: var(--ink-2); }
+
+  .knob-label {
+    font-size: 9.5px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: center;
+    line-height: 1.35;
+    max-width: 13ch;
+  }
+
+  /* ---- switches ---- */
+
+  .switches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 8px;
+  }
+  .sw {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 9px 11px;
+    background: var(--well);
+    border: 1px solid var(--edge);
+    border-radius: var(--r);
+    cursor: pointer;
+    text-align: left;
+    font: inherit;
+    color: var(--ink-2);
+    width: 100%;
+  }
+  .sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .sw .led {
+    flex: none;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--edge-2);
+    box-shadow: none;
+    transition: background .12s, box-shadow .12s;
+  }
+  .sw[aria-pressed="true"] { color: var(--ink); border-color: var(--edge-2); }
+  .sw[aria-pressed="true"] .led {
+    background: var(--cut);
+    box-shadow: 0 0 6px var(--cut);
+  }
+  .sw .sw-name {
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  .sw .sw-state {
+    margin-left: auto;
+    font-size: 9.5px;
+    letter-spacing: .1em;
+    color: var(--ink-3);
+  }
+
+  /* ---- output stage ---- */
+
+  .stage { position: sticky; top: 16px; }
+  @media (max-width: 940px) { .stage { position: static; } }
+
+  /* windowed readout: keeps the output stage from running far past the console */
+  .feed {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    max-height: 620px;
+    overflow-y: auto;
+    padding-right: 6px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--edge-2) transparent;
+  }
+  .feed::-webkit-scrollbar { width: 8px; }
+  .feed::-webkit-scrollbar-thumb {
+    background: var(--edge-2);
+    border-radius: 4px;
+  }
+  .feed::-webkit-scrollbar-track { background: transparent; }
+
+  .post {
+    position: relative;
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+    padding: 9px 11px 10px;
+    background: var(--well);
+    border: 1px solid var(--edge);
+    border-left: 2px solid var(--edge-2);
+    border-radius: var(--r);
+  }
+  .post.is-boosted { border-left-color: var(--boost); }
+  .post.is-cut     { border-left-color: var(--cut); }
+  .post.is-dropped {
+    opacity: .38;
+    border-left-color: var(--edge);
+    border-style: dashed;
+  }
+
+  .post .rank {
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    padding-top: 2px;
+  }
+  .post .who {
+    font-size: 10.5px;
+    letter-spacing: .04em;
+    color: var(--ink-2);
+    margin-bottom: 3px;
+  }
+  .post .who .net {
+    color: var(--ink-3);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-size: 9px;
+  }
+  .post .body {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--ink);
+  }
+  .post.is-dropped .body { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+  .post .tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+  }
+  .tag {
+    font-size: 8.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 2px 5px;
+    border-radius: 2px;
+    border: 1px solid var(--edge-2);
+    color: var(--ink-3);
+    white-space: nowrap;
+  }
+  .tag.t-boost { color: var(--boost); border-color: color-mix(in srgb, var(--boost) 45%, transparent); }
+  .tag.t-cut   { color: var(--cut);   border-color: color-mix(in srgb, var(--cut) 45%, transparent); }
+
+  .post .score {
+    text-align: right;
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    padding-top: 1px;
+  }
+  .post .score small {
+    display: block;
+    font-size: 9px;
+    font-weight: 400;
+    letter-spacing: .06em;
+    color: var(--ink-3);
+    margin-top: 2px;
+  }
+  .score.is-boost { color: var(--boost); }
+  .score.is-cut   { color: var(--cut); }
+
+  .meter {
+    display: flex;
+    gap: 1px;
+    height: 3px;
+    margin-top: 9px;
+    border-radius: 2px;
+    overflow: hidden;
+    background: var(--well);
+  }
+  .meter span { display: block; height: 100%; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-top: 14px;
+    padding-top: 11px;
+    border-top: 1px solid var(--edge);
+    font-size: 9.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .legend i {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    margin-right: 5px;
+    vertical-align: -1px;
+  }
+
+  /* ---- code out ---- */
+
+  .codewrap { position: relative; }
+  pre.code {
+    margin: 0;
+    padding: 13px 14px;
+    background: var(--well);
+    border: 1px solid var(--edge);
+    border-radius: var(--r);
+    overflow-x: auto;
+    font-size: 10.5px;
+    line-height: 1.7;
+    color: var(--ink-2);
+    tab-size: 4;
+  }
+  pre.code b { color: var(--accent); font-weight: 700; }
+  pre.code i { color: var(--ink-3); font-style: normal; }
+
+  .btn {
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    background: var(--panel-3);
+    border: 1px solid var(--edge-2);
+    border-radius: var(--r);
+    padding: 6px 11px;
+    cursor: pointer;
+  }
+  .btn:hover { color: var(--ink); border-color: var(--accent); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .row .spacer { flex: 1; }
+  .hint {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    color: var(--ink-3);
+  }
+
+  .stat {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px dotted var(--edge);
+    font-size: 11px;
+  }
+  .stat:last-child { border-bottom: 0; }
+  .stat dt { color: var(--ink-3); letter-spacing: .08em; text-transform: uppercase; }
+  .stat dd { margin: 0; font-variant-numeric: tabular-nums; font-weight: 700; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="plate">
+    <h1>Feed Policy Console</h1>
+    <span class="rule"></span>
+    <span class="sub">home-mixer &middot; FeedPolicyScorer + FeedQualityFilter</span>
+  </div>
+
+  <div class="desk">
+
+    <!-- ============ CONSOLE ============ -->
+    <div>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Network</h2><span class="rule"></span></div>
+        <p class="bank-note">Applied first, by where the post came from. Unknown means in-network hydration never landed &mdash; those posts are dropped by the filter before they reach here.</p>
+        <div class="knobs" id="bank-network"></div>
+      </section>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Category</h2><span class="rule"></span></div>
+        <p class="bank-note">Multiplied together, so a post tagged both sports and fandom takes both cuts. Hard news stacks on top of everything.</p>
+        <div class="knobs" id="bank-category"></div>
+      </section>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Overexposure</h2><span class="rule"></span></div>
+        <p class="bank-note">An author whose share of Elon mentions in this batch exceeds the threshold gets cut. Needs at least 4 posts from that author in the batch before it measures anything.</p>
+        <div class="knobs" id="bank-elon"></div>
+      </section>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Hard filters</h2><span class="rule"></span></div>
+        <p class="bank-note">Removal, not ranking. These run in FeedQualityFilter before any score is computed.</p>
+        <div class="switches" id="bank-switches"></div>
+      </section>
+
+    </div>
+
+    <!-- ============ OUTPUT ============ -->
+    <div class="stage">
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Output</h2><span class="rule"></span></div>
+        <div class="feed" id="feed"></div>
+        <div class="legend">
+          <span><i style="background:var(--boost)"></i>boosted</span>
+          <span><i style="background:var(--cut)"></i>cut</span>
+          <span><i style="background:var(--edge-2)"></i>unchanged</span>
+          <span><i style="background:var(--edge)"></i>removed</span>
+        </div>
+      </section>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Reading</h2><span class="rule"></span></div>
+        <dl id="stats" style="margin:0"></dl>
+      </section>
+
+      <section class="bank">
+        <div class="bank-hd"><h2>Panel output</h2><span class="rule"></span></div>
+        <div class="codewrap"><pre class="code" id="code"></pre></div>
+        <div class="row">
+          <button class="btn" id="copy" type="button">Copy consts</button>
+          <button class="btn" id="reset" type="button">Reset to shipped</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Shipped values, matching home-mixer/scorers/feed_policy_scorer.rs
+  // and home-mixer/filters/feed_quality_filter.rs.
+  var SHIPPED = {
+    inNetwork:   2.0,
+    outNetwork:  0.1,
+    hardNews:    1.5,
+    stem:        1.25,
+    sports:      0.6,
+    fandom:      0.6,
+    elonCut:     0.5,
+    elonRatio:   0.25
+  };
+
+  var SWITCHES = [
+    { key: "fUnknown",    name: "Unknown network", desc: "in_network.is_none()" },
+    { key: "fShortVideo", name: "Short-form video", desc: "<= 60s" },
+    { key: "fRestricted", name: "Restricted authors", desc: "screen name list" },
+    { key: "fBait",       name: "Bait + clickbait", desc: "phrase match" }
+  ];
+
+  var DIALS = [
+    { key: "inNetwork",  bank: "bank-network",  label: "In-network",   min: 0,   max: 4,   step: 0.05, unit: "x" },
+    { key: "outNetwork", bank: "bank-network",  label: "Out-of-network", min: 0, max: 2,   step: 0.05, unit: "x" },
+    { key: "hardNews",   bank: "bank-category", label: "Hard news",    min: 0,   max: 3,   step: 0.05, unit: "x" },
+    { key: "stem",       bank: "bank-category", label: "STEM",         min: 0,   max: 3,   step: 0.05, unit: "x" },
+    { key: "sports",     bank: "bank-category", label: "Sports",       min: 0,   max: 2,   step: 0.05, unit: "x" },
+    { key: "fandom",     bank: "bank-category", label: "Fandom",       min: 0,   max: 2,   step: 0.05, unit: "x" },
+    { key: "elonCut",    bank: "bank-elon",     label: "Derank",       min: 0,   max: 2,   step: 0.05, unit: "x" },
+    { key: "elonRatio",  bank: "bank-elon",     label: "Threshold",    min: 0,   max: 1,   step: 0.01, unit: "%" }
+  ];
+
+  // A sample batch. `phoenix` is the model score the ranker hands over;
+  // everything else is what the policy layer keys off.
+  var POSTS = [
+    { id: 1, author: "Cascadia Wire", handle: "cascadiawire", inNet: false, phoenix: 0.71,
+      text: "County certifies the recount. Margin holds at 412 votes, and the challenge window closes Friday.",
+      topics: ["news", "elections"] },
+    { id: 2, author: "Mira Okonkwo", handle: "miraok", inNet: true, phoenix: 0.58,
+      text: "Our Webb cycle-4 proposal got time. Eighteen hours on the protoplanetary disk in Cha I.",
+      topics: ["space", "science"] },
+    { id: 3, author: "Deque", handle: "dequelabs", inNet: false, phoenix: 0.44,
+      text: "Wrote up why our borrow-checker workaround was hiding a real lifetime bug for two years.",
+      topics: ["software"] },
+    { id: 4, author: "Hoops Desk", handle: "hoopsdesk", inNet: true, phoenix: 0.77,
+      text: "Fourth quarter collapse. 22 unanswered, and the bench never got off the floor.",
+      topics: ["nba", "sports"] },
+    { id: 5, author: "Reel Chatter", handle: "reelchatter", inNet: false, phoenix: 0.69,
+      text: "The reunion special dropped the entire original cast in the last four minutes. Nobody was ready.",
+      topics: ["celebrity", "movies"] },
+    { id: 6, author: "Growth Guy", handle: "growthguy", inNet: true, phoenix: 0.81,
+      text: "Follow for more threads like this. Comment below if you want part two.",
+      topics: [], bait: true },
+    { id: 7, author: "DogeDesigner", handle: "dogedesigner", inNet: false, phoenix: 0.88,
+      text: "This changes everything for the platform.",
+      topics: [], restricted: true },
+    { id: 8, author: "Clip Farm", handle: "clipfarm", inNet: false, phoenix: 0.64,
+      text: "42 seconds of a cat knocking a glass off a table, looped.",
+      topics: [], videoMs: 42000 },
+    { id: 9, author: "unhydrated", handle: "unhydrated", inNet: null, phoenix: 0.52,
+      text: "Post whose in-network hydration never landed.",
+      topics: [] },
+    { id: 10, author: "Tesla Daily", handle: "tsladaily", inNet: false, phoenix: 0.61,
+      text: "Elon confirmed the timeline shift on the call this morning.",
+      topics: [], elonAuthor: true, mentionsElon: true },
+    { id: 11, author: "Tesla Daily", handle: "tsladaily", inNet: false, phoenix: 0.55,
+      text: "Elon again on the topic of the roadmap, second time today.",
+      topics: [], elonAuthor: true, mentionsElon: true },
+    { id: 12, author: "Tesla Daily", handle: "tsladaily", inNet: false, phoenix: 0.49,
+      text: "Delivery numbers for the quarter are out.",
+      topics: ["stocks"], elonAuthor: true },
+    { id: 13, author: "Tesla Daily", handle: "tsladaily", inNet: false, phoenix: 0.46,
+      text: "Supercharger network crossed another milestone in the region.",
+      topics: [], elonAuthor: true },
+    { id: 14, author: "Kelp Forest Trust", handle: "kelptrust", inNet: true, phoenix: 0.39,
+      text: "Third season of urchin removal and the canopy is back to 60% of the 2013 survey.",
+      topics: ["science"] }
+  ];
+
+  var HARD_NEWS = ["news", "elections", "politics", "crime", "stocks", "disasters"];
+  var STEM      = ["science", "space", "software", "ai", "robotics", "biotech", "education"];
+  var SPORTS    = ["sports", "nba", "soccer", "nfl", "mlb", "tennis"];
+  var FANDOM    = ["celebrity", "movies", "anime", "kpop", "memes", "streaming"];
+
+  var state = {};
+  var switchState = { fUnknown: true, fShortVideo: true, fRestricted: true, fBait: true };
+  Object.keys(SHIPPED).forEach(function (k) { state[k] = SHIPPED[k]; });
+
+  // ---------- knob geometry ----------
+
+  var A0 = -135, A1 = 135, R = 21, CX = 27, CY = 27;
+
+  function polar(cx, cy, r, deg) {
+    var a = (deg - 90) * Math.PI / 180;
+    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+  }
+
+  function arcPath(cx, cy, r, a0, a1) {
+    var s = polar(cx, cy, r, a1), e = polar(cx, cy, r, a0);
+    var large = (a1 - a0) <= 180 ? 0 : 1;
+    return ["M", s.x.toFixed(2), s.y.toFixed(2), "A", r, r, 0, large, 0, e.x.toFixed(2), e.y.toFixed(2)].join(" ");
+  }
+
+  function svgEl(name, attrs) {
+    var el = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (var k in attrs) el.setAttribute(k, attrs[k]);
+    return el;
+  }
+
+  function makeKnob(cfg) {
+    var wrap = document.createElement("div");
+    wrap.className = "knob";
+    wrap.tabIndex = 0;
+    wrap.setAttribute("role", "slider");
+    wrap.setAttribute("aria-label", cfg.label);
+    wrap.setAttribute("aria-valuemin", cfg.min);
+    wrap.setAttribute("aria-valuemax", cfg.max);
+
+    var svg = svgEl("svg", { width: 54, height: 54, viewBox: "0 0 54 54" });
+
+    // index ticks at min / centre / max
+    [A0, 0, A1].forEach(function (a) {
+      var p1 = polar(CX, CY, R + 5, a), p2 = polar(CX, CY, R + 7.5, a);
+      svg.appendChild(svgEl("line", {
+        class: "tick", x1: p1.x.toFixed(2), y1: p1.y.toFixed(2),
+        x2: p2.x.toFixed(2), y2: p2.y.toFixed(2)
+      }));
+    });
+
+    svg.appendChild(svgEl("path", { class: "track", d: arcPath(CX, CY, R, A0, A1) }));
+    var arc = svgEl("path", { class: "arc", d: "" });
+    svg.appendChild(arc);
+    svg.appendChild(svgEl("circle", { class: "cap-face", cx: CX, cy: CY, r: 15 }));
+    svg.appendChild(svgEl("circle", { class: "cap-in", cx: CX, cy: CY, r: 11.5 }));
+    var notch = svgEl("line", { class: "notch", x1: CX, y1: CY, x2: CX, y2: CY });
+    svg.appendChild(notch);
+
+    var read  = document.createElement("div"); read.className = "knob-read";
+    var label = document.createElement("div"); label.className = "knob-label"; label.textContent = cfg.label;
+
+    wrap.appendChild(svg); wrap.appendChild(read); wrap.appendChild(label);
+
+    function frac() {
+      return (state[cfg.key] - cfg.min) / (cfg.max - cfg.min);
+    }
+
+    function paint() {
+      var f = Math.max(0, Math.min(1, frac()));
+      var a = A0 + f * (A1 - A0);
+      arc.setAttribute("d", f <= 0.001 ? "" : arcPath(CX, CY, R, A0, a));
+      var tip = polar(CX, CY, 12.5, a), base = polar(CX, CY, 4.5, a);
+      notch.setAttribute("x1", base.x.toFixed(2)); notch.setAttribute("y1", base.y.toFixed(2));
+      notch.setAttribute("x2", tip.x.toFixed(2));  notch.setAttribute("y2", tip.y.toFixed(2));
+
+      var v = state[cfg.key];
+      read.textContent = cfg.unit === "%" ? Math.round(v * 100) + "%" : v.toFixed(2) + "×";
+      read.className = "knob-read " + (
+        cfg.unit === "%" ? "is-unity" :
+        v > 1.001 ? "is-boost" : v < 0.999 ? "is-cut" : "is-unity"
+      );
+      wrap.setAttribute("aria-valuenow", v.toFixed(2));
+      wrap.setAttribute("aria-valuetext", read.textContent);
+    }
+
+    function set(v) {
+      var d = 1 / cfg.step;
+      v = Math.round(Math.max(cfg.min, Math.min(cfg.max, v)) * d) / d;
+      if (v === state[cfg.key]) return;
+      state[cfg.key] = v;
+      paint(); render();
+    }
+
+    // drag: vertical travel over ~140px covers the full sweep
+    var dragging = false, startY = 0, startV = 0;
+    wrap.addEventListener("pointerdown", function (e) {
+      dragging = true; startY = e.clientY; startV = state[cfg.key];
+      wrap.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    wrap.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      var span = cfg.max - cfg.min;
+      var fine = e.shiftKey ? 0.25 : 1;
+      set(startV + ((startY - e.clientY) / 140) * span * fine);
+    });
+    ["pointerup", "pointercancel"].forEach(function (t) {
+      wrap.addEventListener(t, function () { dragging = false; });
+    });
+    wrap.addEventListener("dblclick", function () { set(SHIPPED[cfg.key]); });
+
+    wrap.addEventListener("keydown", function (e) {
+      var big = cfg.step * 10, k = e.key;
+      if (k === "ArrowUp" || k === "ArrowRight") set(state[cfg.key] + cfg.step);
+      else if (k === "ArrowDown" || k === "ArrowLeft") set(state[cfg.key] - cfg.step);
+      else if (k === "PageUp") set(state[cfg.key] + big);
+      else if (k === "PageDown") set(state[cfg.key] - big);
+      else if (k === "Home") set(cfg.min);
+      else if (k === "End") set(cfg.max);
+      else return;
+      e.preventDefault();
+    });
+
+    cfg.paint = paint;
+    paint();
+    return wrap;
+  }
+
+  DIALS.forEach(function (cfg) {
+    document.getElementById(cfg.bank).appendChild(makeKnob(cfg));
+  });
+
+  // ---------- switches ----------
+
+  var swBox = document.getElementById("bank-switches");
+  SWITCHES.forEach(function (s) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "sw";
+    b.setAttribute("aria-pressed", String(switchState[s.key]));
+    b.innerHTML = '<span class="led"></span><span class="sw-name"></span><span class="sw-state"></span>';
+    b.querySelector(".sw-name").textContent = s.name;
+    function paint() {
+      b.setAttribute("aria-pressed", String(switchState[s.key]));
+      b.querySelector(".sw-state").textContent = switchState[s.key] ? "REMOVE" : "PASS";
+    }
+    b.addEventListener("click", function () {
+      switchState[s.key] = !switchState[s.key];
+      paint(); render();
+    });
+    paint();
+    swBox.appendChild(b);
+  });
+
+  // ---------- policy ----------
+
+  function hasAny(post, list) {
+    return post.topics.some(function (t) { return list.indexOf(t) !== -1; });
+  }
+
+  function removalReason(p) {
+    if (switchState.fUnknown && p.inNet === null) return "unknown network";
+    if (switchState.fShortVideo && p.videoMs && p.videoMs <= 60000) return "short-form video";
+    if (switchState.fRestricted && p.restricted) return "restricted author";
+    if (switchState.fBait && p.bait) return "bait";
+    return null;
+  }
+
+  // Mirrors FeedPolicyScorer::policy_weight
+  function weigh(p, elonRatios) {
+    var parts = [];
+    var w = p.inNet === null ? 0 : (p.inNet ? state.inNetwork : state.outNetwork);
+    parts.push({ name: p.inNet ? "in-net" : "oon", v: w, kind: "net" });
+
+    if (hasAny(p, HARD_NEWS)) { w *= state.hardNews; parts.push({ name: "hard news", v: state.hardNews }); }
+    if (hasAny(p, STEM))      { w *= state.stem;     parts.push({ name: "stem",      v: state.stem }); }
+    if (hasAny(p, SPORTS))    { w *= state.sports;   parts.push({ name: "sports",    v: state.sports }); }
+    if (hasAny(p, FANDOM))    { w *= state.fandom;   parts.push({ name: "fandom",    v: state.fandom }); }
+
+    var r = elonRatios[p.handle];
+    if (r !== undefined && r > state.elonRatio) {
+      w *= state.elonCut;
+      parts.push({ name: "overexposed", v: state.elonCut });
+    }
+    return { weight: w, parts: parts };
+  }
+
+  function elonRatiosFor(posts) {
+    var counts = {}, out = {};
+    posts.forEach(function (p) {
+      var c = counts[p.handle] || (counts[p.handle] = { n: 0, m: 0 });
+      c.n++; if (p.mentionsElon) c.m++;
+    });
+    Object.keys(counts).forEach(function (h) {
+      if (counts[h].n >= 4) out[h] = counts[h].m / counts[h].n;
+    });
+    return out;
+  }
+
+  // ---------- render ----------
+
+  var feedEl = document.getElementById("feed");
+  var statsEl = document.getElementById("stats");
+  var codeEl = document.getElementById("code");
+
+  function fmt(n) { return n.toFixed(3); }
+
+  function render() {
+    var kept = [], dropped = [];
+    POSTS.forEach(function (p) {
+      var why = removalReason(p);
+      if (why) dropped.push({ p: p, why: why });
+      else kept.push(p);
+    });
+
+    var ratios = elonRatiosFor(kept);
+    var scored = kept.map(function (p) {
+      var r = weigh(p, ratios);
+      return { p: p, weight: r.weight, parts: r.parts, score: p.phoenix * r.weight };
+    });
+    scored.sort(function (a, b) { return b.score - a.score; });
+
+    // FLIP: capture, rewrite, animate
+    var prev = {};
+    Array.prototype.forEach.call(feedEl.children, function (n) {
+      if (n.dataset.id) prev[n.dataset.id] = n.getBoundingClientRect().top;
+    });
+
+    feedEl.innerHTML = "";
+
+    scored.forEach(function (row, i) {
+      feedEl.appendChild(postEl(row, i + 1));
+    });
+    dropped.forEach(function (d) {
+      feedEl.appendChild(droppedEl(d));
+    });
+
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      Array.prototype.forEach.call(feedEl.children, function (n) {
+        var id = n.dataset.id;
+        if (!id || prev[id] === undefined) return;
+        var delta = prev[id] - n.getBoundingClientRect().top;
+        if (!delta) return;
+        n.animate(
+          [{ transform: "translateY(" + delta + "px)" }, { transform: "translateY(0)" }],
+          { duration: 260, easing: "cubic-bezier(.22,.7,.3,1)" }
+        );
+      });
+    }
+
+    paintStats(scored, dropped);
+    paintCode();
+  }
+
+  function postEl(row, rank) {
+    var p = row.p;
+    var el = document.createElement("article");
+    el.className = "post" + (row.weight > 1.001 ? " is-boosted" : row.weight < 0.999 ? " is-cut" : "");
+    el.dataset.id = p.id;
+
+    var cls = row.weight > 1.001 ? "is-boost" : row.weight < 0.999 ? "is-cut" : "";
+
+    var tags = row.parts.filter(function (x) { return x.kind !== "net"; }).map(function (x) {
+      var k = x.v > 1.001 ? "t-boost" : x.v < 0.999 ? "t-cut" : "";
+      return '<span class="tag ' + k + '">' + x.name + " " + x.v.toFixed(2) + "×</span>";
+    }).join("");
+
+    var net = p.inNet ? "in-network" : "out-of-network";
+
+    el.innerHTML =
+      '<div class="rank">' + String(rank).padStart(2, "0") + "</div>" +
+      '<div><div class="who">' + p.author + ' <span class="net">' + net + "</span></div>" +
+      '<div class="body"></div>' +
+      '<div class="tags">' + tags + "</div></div>" +
+      '<div class="score ' + cls + '">' + fmt(row.score) + "<small>" + row.weight.toFixed(2) + "×</small></div>";
+
+    el.querySelector(".body").textContent = p.text;
+    return el;
+  }
+
+  function droppedEl(d) {
+    var el = document.createElement("article");
+    el.className = "post is-dropped";
+    el.dataset.id = d.p.id;
+    el.innerHTML =
+      '<div class="rank">&mdash;</div>' +
+      '<div><div class="who">' + d.p.author + ' <span class="net">removed</span></div>' +
+      '<div class="body"></div>' +
+      '<div class="tags"><span class="tag t-cut">' + d.why + "</span></div></div>" +
+      '<div class="score">&mdash;</div>';
+    el.querySelector(".body").textContent = d.p.text;
+    return el;
+  }
+
+  function paintStats(scored, dropped) {
+    var inNet = scored.filter(function (r) { return r.p.inNet === true; }).length;
+    var top5 = scored.slice(0, 5);
+    var top5InNet = top5.filter(function (r) { return r.p.inNet === true; }).length;
+    var boosted = scored.filter(function (r) { return r.weight > 1.001; }).length;
+    var cut = scored.filter(function (r) { return r.weight < 0.999; }).length;
+
+    var rows = [
+      ["Surviving", scored.length + " / " + POSTS.length],
+      ["Removed", String(dropped.length)],
+      ["In-network share", scored.length ? Math.round(100 * inNet / scored.length) + "%" : "—"],
+      ["In-network in top 5", top5.length ? top5InNet + " / " + top5.length : "—"],
+      ["Boosted / cut", boosted + " / " + cut]
+    ];
+
+    statsEl.innerHTML = rows.map(function (r) {
+      return '<div class="stat"><dt>' + r[0] + "</dt><dd>" + r[1] + "</dd></div>";
+    }).join("");
+  }
+
+  function paintCode() {
+    function c(name, v, unit) {
+      return "const <b>" + name + "</b>: f64 = <b>" + v.toFixed(2) + "</b>;";
+    }
+    codeEl.innerHTML = [
+      "<i>// home-mixer/scorers/feed_policy_scorer.rs</i>",
+      c("IN_NETWORK_WEIGHT_FACTOR", state.inNetwork),
+      c("OUT_OF_NETWORK_WEIGHT_FACTOR", state.outNetwork),
+      c("HARD_NEWS_WEIGHT_FACTOR", state.hardNews),
+      c("STEM_WEIGHT_FACTOR", state.stem),
+      c("SPORTS_WEIGHT_FACTOR", state.sports),
+      c("FANDOM_WEIGHT_FACTOR", state.fandom),
+      c("OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR", state.elonCut),
+      c("ELON_MENTION_RATIO_THRESHOLD", state.elonRatio)
+    ].join("\n");
+  }
+
+  function plainCode() {
+    return codeEl.textContent;
+  }
+
+  document.getElementById("copy").addEventListener("click", function () {
+    var btn = this;
+    var done = function () {
+      btn.textContent = "Copied";
+      setTimeout(function () { btn.textContent = "Copy consts"; }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(plainCode()).then(done, done);
+    } else {
+      var ta = document.createElement("textarea");
+      ta.value = plainCode();
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta); done();
+    }
+  });
+
+  document.getElementById("reset").addEventListener("click", function () {
+    Object.keys(SHIPPED).forEach(function (k) { state[k] = SHIPPED[k]; });
+    SWITCHES.forEach(function (s) { switchState[s.key] = true; });
+    DIALS.forEach(function (d) { d.paint(); });
+    Array.prototype.forEach.call(swBox.querySelectorAll(".sw"), function (b, i) {
+      b.setAttribute("aria-pressed", "true");
+      b.querySelector(".sw-state").textContent = "REMOVE";
+    });
+    render();
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
