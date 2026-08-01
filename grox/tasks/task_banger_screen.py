@@ -3,6 +3,7 @@ import time
 from typing import override
 
 from grox.tasks.task import Task, TaskWithPost, TaskResultCategory
+from grox.tasks.disable_rules import DisableTaskAlways
 from monitor.metrics import Metrics
 from grox.schedules.types import TaskContext
 from grox.data_loaders.data_types import Post, ContentCategoryType
@@ -16,6 +17,14 @@ CACHE_TTL_SECONDS = 3600
 
 
 class TaskBangerScreen(TaskWithPost):
+    """Scores a post for how well it is expected to perform, and labels it a banger or not.
+
+    Disabled. Ranking on predicted virality is the mechanism this feed is being tuned away from,
+    so the screen is off at the task and its plan is unregistered in PlanMaster - two independent
+    switches, because either one alone leaves a way for it to run.
+    """
+
+    DISABLE_RULES = [DisableTaskAlways]
     classifier = BangerInitialScreenClassifier()
     _cached_topics = None
     _cache_timestamp = None
