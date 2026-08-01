@@ -527,7 +527,7 @@
 
       <section class="bank">
         <div class="bank-hd"><h2>Affiliation</h2><span class="rule"></span></div>
-        <p class="bank-note">Posts from the X / xAI / Tesla / SpaceX roster in scorers/affiliated_authors.rs, and reposts of them. Deranked, not removed.</p>
+        <p class="bank-note">Posts from accounts carrying an X / xAI / Tesla / SpaceX affiliate badge, and reposts of them. The badge is the organization's own statement of who belongs to it, so the set updates itself when someone leaves. Deranked, not removed.</p>
         <div class="knobs" id="bank-affiliation"></div>
       </section>
 
@@ -678,9 +678,9 @@
     { id: 17, author: "Ridgeline Notes", handle: "ridgelinenotes", inNet: false, phoenix: 0.28,
       text: "Fog sat in the valley until noon. Counted eleven elk on the far slope waiting it out.",
       topics: ["nature"] },
-    { id: 18, author: "SpaceX", handle: "spacex", inNet: true, phoenix: 0.86,
+    { id: 18, author: "Dana Whitlock", handle: "danawhitlock", inNet: true, phoenix: 0.86,
       text: "Static fire of the booster complete ahead of the next flight test.",
-      topics: ["space"], affiliated: true },
+      topics: ["space"], affiliated: true, badge: "spacex" },
     { id: 19, author: "Nell Abara", handle: "nellabara", inNet: false, phoenix: 0.42,
       text: "The comeback single is the first thing they have released that sounds like the demos.",
       topics: ["music", "kpop"] },
@@ -892,7 +892,7 @@
 
     if (p.affiliated) {
       w *= state.affiliated;
-      parts.push({ name: "affiliated author", v: state.affiliated });
+      parts.push({ name: (p.badge || "affiliate") + " badge", v: state.affiliated });
     }
 
     var r = elonRatios[p.handle];

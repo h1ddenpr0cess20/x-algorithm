@@ -12,6 +12,7 @@ use crate::scorers::affiliated_authors;
 use std::collections::HashMap;
 use tonic::async_trait;
 use xai_candidate_pipeline::scorer::Scorer;
+use xai_stats_receiver::global_stats_receiver;
 
 const IN_NETWORK_WEIGHT_FACTOR: f64 = 2.0;
 const OUT_OF_NETWORK_WEIGHT_FACTOR: f64 = 0.1;
@@ -82,10 +83,16 @@ const HISTORY_PHRASES: [&str; 12] = [
     "archival footage",
 ];
 
-/// Posts from accounts on the X / xAI / Tesla / SpaceX roster are deranked, not removed: the
-/// roster is an editorial preference about how much of the feed these accounts should occupy,
-/// and a weight says that where a hard removal would overstate it.
+/// Posts from accounts carrying an X / xAI / Tesla / SpaceX affiliate badge are deranked, not
+/// removed: this is a preference about how much of the feed these accounts should occupy, and a
+/// weight says that where a hard removal would overstate it.
 const AFFILIATED_AUTHOR_WEIGHT_FACTOR: f64 = 0.25;
+
+/// Tagged by the organization the badge points at, or `other` for a badge from anywhere else, or
+/// `none` for a post whose author carries no badge. The `none` bucket is the point: it separates
+/// "no affiliated accounts in this batch" from "the badge never arrives", which is the failure
+/// mode of keying on a field this service does not control.
+const AFFILIATE_BADGE_METRIC: &str = "FeedPolicyScorer.affiliate_badge";
 
 /// How much of the model's predicted-engagement spread survives into the final ordering.
 ///
@@ -94,7 +101,7 @@ const AFFILIATED_AUTHOR_WEIGHT_FACTOR: f64 = 0.25;
 /// everyone else's. At 1.0 that estimate decides almost everything, because its spread across a
 /// batch is far wider than any weight below. At 0.5 a post the model rates twice as likely to be
 /// engaged with arrives roughly 1.4x ahead instead of 2x, which leaves the ordering to the
-/// weights — network, topic, roster — rather than to the prediction. Order within the model's own
+/// weights — network, topic, affiliation — rather than to the prediction. Order within the model's own
 /// ranking is untouched: this compresses distances, it does not reshuffle.
 const PREDICTED_ENGAGEMENT_SPREAD: f64 = 0.5;
 
@@ -242,8 +249,38 @@ impl FeedPolicyScorer {
         stem_weight * sports_weight * fandom_weight * Self::interest_weight(candidate)
     }
 
-    /// Derank the X / xAI / Tesla / SpaceX roster. Reposts count: the roster is about whose
-    /// content is being carried, not who pressed the button.
+    fn badge_bucket(candidate: &PostCandidate) -> &'static str {
+        match (
+            affiliated_authors::affiliation_of(candidate),
+            affiliated_authors::badge_of(candidate),
+        ) {
+            (Some(organization), _) => organization,
+            (None, Some(_)) => "other",
+            (None, None) => "none",
+        }
+    }
+
+    fn badge_buckets(candidates: &[PostCandidate]) -> HashMap<&'static str, u64> {
+        let mut counts: HashMap<&'static str, u64> = HashMap::new();
+        for candidate in candidates {
+            *counts.entry(Self::badge_bucket(candidate)).or_default() += 1;
+        }
+        counts
+    }
+
+    /// One line per badge bucket, aggregated over the batch rather than emitted per candidate.
+    fn record_affiliate_badges(candidates: &[PostCandidate]) {
+        let Some(receiver) = global_stats_receiver() else {
+            return;
+        };
+
+        for (bucket, count) in Self::badge_buckets(candidates) {
+            receiver.incr(AFFILIATE_BADGE_METRIC, &[("org", bucket)], count);
+        }
+    }
+
+    /// Derank accounts an affiliated organization has badged. Reposts count: the badge is about
+    /// whose content is being carried, not who pressed the button.
     fn author_weight(candidate: &PostCandidate) -> f64 {
         if affiliated_authors::is_affiliated(candidate) {
             AFFILIATED_AUTHOR_WEIGHT_FACTOR
@@ -335,6 +372,7 @@ impl Scorer<ScoredPostsQuery, PostCandidate> for FeedPolicyScorer {
     ) -> Vec<Result<PostCandidate, String>> {
         let elon_mention_ratios = Self::author_elon_mention_ratios(candidates);
         let reference = Self::batch_reference(candidates);
+        Self::record_affiliate_badges(candidates);
 
         candidates
             .iter()
@@ -657,9 +695,9 @@ mod tests {
     }
 
     #[test]
-    fn affiliated_authors_are_deranked() {
+    fn badged_affiliates_are_deranked() {
         let post = PostCandidate {
-            author_screen_name: Some("SpaceX".to_string()),
+            author_affiliate_handle: Some("spacex".to_string()),
             ..candidate(7, "static fire complete")
         };
 
@@ -671,9 +709,9 @@ mod tests {
 
     #[test]
     fn the_affiliation_derank_survives_a_topic_boost() {
-        // A STEM boost should not undo the derank on a company account posting about its own work.
+        // A STEM boost should not undo the derank on an affiliate posting about their own work.
         let post = PostCandidate {
-            author_screen_name: Some("@xAI".to_string()),
+            author_affiliate_handle: Some("xai".to_string()),
             filtered_topic_ids: Some(vec![XAI_SCIENCE]),
             ..candidate(7, "a model release")
         };
@@ -685,10 +723,9 @@ mod tests {
     }
 
     #[test]
-    fn reposts_of_affiliated_authors_are_deranked_too() {
+    fn reposts_of_badged_affiliates_are_deranked_too() {
         let repost = PostCandidate {
-            author_screen_name: Some("someoneelse".to_string()),
-            retweeted_screen_name: Some("Tesla".to_string()),
+            retweeted_affiliate_handle: Some("tesla".to_string()),
             ..candidate(7, "a reposted announcement")
         };
 
@@ -771,14 +808,57 @@ mod tests {
     }
 
     #[test]
-    fn unaffiliated_authors_keep_their_weight() {
+    fn a_badge_from_another_organization_keeps_its_weight() {
         let post = PostCandidate {
-            author_screen_name: Some("cascadiawire".to_string()),
+            author_affiliate_handle: Some("nasa".to_string()),
             ..candidate(7, "an ordinary post")
         };
 
         assert_eq!(
             FeedPolicyScorer::policy_weight(&post, None),
+            IN_NETWORK_WEIGHT_FACTOR
+        );
+    }
+
+    #[test]
+    fn the_badge_metric_separates_no_affiliates_from_no_badges_at_all() {
+        // The whole point of the `none` bucket. A batch where the field never arrived reports
+        // every candidate as unbadged; a batch that simply held no affiliates looks different,
+        // because badges from elsewhere still show up under `other`.
+        let never_arrived = [candidate(7, "one"), candidate(8, "two")];
+        let arrived_no_affiliates = [
+            PostCandidate {
+                author_affiliate_handle: Some("nasa".to_string()),
+                ..candidate(7, "one")
+            },
+            candidate(8, "two"),
+        ];
+        let arrived_with_affiliates = [
+            PostCandidate {
+                author_affiliate_handle: Some("tesla".to_string()),
+                ..candidate(7, "one")
+            },
+            candidate(8, "two"),
+        ];
+
+        assert_eq!(
+            FeedPolicyScorer::badge_buckets(&never_arrived).get("none"),
+            Some(&2)
+        );
+        assert_eq!(
+            FeedPolicyScorer::badge_buckets(&arrived_no_affiliates).get("other"),
+            Some(&1)
+        );
+        assert_eq!(
+            FeedPolicyScorer::badge_buckets(&arrived_with_affiliates).get("tesla"),
+            Some(&1)
+        );
+    }
+
+    #[test]
+    fn an_unbadged_author_keeps_its_weight() {
+        assert_eq!(
+            FeedPolicyScorer::policy_weight(&candidate(7, "an ordinary post"), None),
             IN_NETWORK_WEIGHT_FACTOR
         );
     }
