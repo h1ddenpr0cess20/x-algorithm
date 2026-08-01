@@ -52,9 +52,6 @@ pub struct FilteredTopicsHydrator {
 
 #[async_trait]
 impl Hydrator<ScoredPostsQuery, PostCandidate> for FilteredTopicsHydrator {
-    /// Runs for every non-cached request rather than only topic requests: `FeedPolicyScorer`
-    /// weights candidates by topic on every request, so topic ids have to be populated even when
-    /// the request itself is not topic-scoped. Cached posts already carry hydrated topic ids.
     fn enable(&self, query: &ScoredPostsQuery) -> bool {
         !query.has_cached_posts
     }
