@@ -1,22 +1,11 @@
 use crate::models::candidate::PostCandidate;
 use crate::models::query::ScoredPostsQuery;
-use crate::params::EnableServedFilterAllRequests;
 use crate::util::candidates_util::get_related_post_ids;
-use xai_candidate_pipeline::component_library::utils::client_utils::RequestContext::{
-    self, ForegroundTruncate,
-};
 use xai_candidate_pipeline::filter::{Filter, FilterResult};
 
 pub struct PreviouslyServedPostsFilter;
 
 impl Filter<ScoredPostsQuery, PostCandidate> for PreviouslyServedPostsFilter {
-    fn enable(&self, query: &ScoredPostsQuery) -> bool {
-        let req_context = RequestContext::parse(&query.request_context);
-        let enable_all = query.params.get(EnableServedFilterAllRequests);
-
-        enable_all || (query.is_bottom_request && req_context != ForegroundTruncate)
-    }
-
     fn filter(
         &self,
         query: &ScoredPostsQuery,
@@ -29,5 +18,58 @@ impl Filter<ScoredPostsQuery, PostCandidate> for PreviouslyServedPostsFilter {
         });
 
         FilterResult { kept, removed }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PreviouslyServedPostsFilter;
+    use crate::models::candidate::PostCandidate;
+    use crate::models::query::ScoredPostsQuery;
+    use xai_candidate_pipeline::filter::Filter;
+
+    #[test]
+    fn removes_served_posts_on_every_request_type() {
+        let query = ScoredPostsQuery {
+            served_ids: vec![42],
+            is_bottom_request: false,
+            is_top_request: true,
+            ..Default::default()
+        };
+        let candidates = vec![
+            PostCandidate {
+                tweet_id: 42,
+                ..Default::default()
+            },
+            PostCandidate {
+                tweet_id: 43,
+                ..Default::default()
+            },
+        ];
+
+        let result = PreviouslyServedPostsFilter.filter(&query, candidates);
+
+        assert_eq!(result.kept.len(), 1);
+        assert_eq!(result.kept[0].tweet_id, 43);
+        assert_eq!(result.removed.len(), 1);
+        assert_eq!(result.removed[0].tweet_id, 42);
+    }
+
+    #[test]
+    fn removes_retweets_of_a_served_source_post() {
+        let query = ScoredPostsQuery {
+            served_ids: vec![42],
+            ..Default::default()
+        };
+        let candidate = PostCandidate {
+            tweet_id: 99,
+            retweeted_tweet_id: Some(42),
+            ..Default::default()
+        };
+
+        let result = PreviouslyServedPostsFilter.filter(&query, vec![candidate]);
+
+        assert!(result.kept.is_empty());
+        assert_eq!(result.removed.len(), 1);
     }
 }
