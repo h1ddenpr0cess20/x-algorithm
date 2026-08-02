@@ -18,6 +18,7 @@ use xai_stats_receiver::global_stats_receiver;
 const IN_NETWORK_WEIGHT_FACTOR: f64 = 2.0;
 const OUT_OF_NETWORK_WEIGHT_FACTOR: f64 = 0.1;
 const HARD_NEWS_WEIGHT_FACTOR: f64 = 1.5;
+const WAR_CRIMES_COVERAGE_WEIGHT_FACTOR: f64 = 1.75;
 const OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR: f64 = 0.5;
 const ELON_MENTION_RATIO_THRESHOLD: f64 = 0.25;
 const MIN_AUTHOR_POSTS_FOR_TOPIC_RATIO: usize = 4;
@@ -34,6 +35,34 @@ const ART_WEIGHT_FACTOR: f64 = 1.4;
 const MUSIC_WEIGHT_FACTOR: f64 = 1.4;
 const NATURE_WEIGHT_FACTOR: f64 = 1.4;
 const HISTORY_WEIGHT_FACTOR: f64 = 1.4;
+
+/// War-crimes reporting has no dedicated topic in the taxonomy. Keep this vocabulary narrow and
+/// tied to atrocity documentation or international criminal law: a generic battlefield update is
+/// still hard news, but does not receive this additional coverage boost.
+const WAR_CRIMES_TERMS: [&str; 4] = ["genocide", "genocidal", "atrocity", "atrocities"];
+
+const WAR_CRIMES_PHRASES: [&str; 20] = [
+    "war crime",
+    "crimes against humanity",
+    "crime against humanity",
+    "ethnic cleansing",
+    "mass grave",
+    "forced displacement",
+    "civilian massacre",
+    "indiscriminate attack",
+    "command responsibility",
+    "collective punishment",
+    "summary execution",
+    "extrajudicial killing",
+    "attacks on civilians",
+    "targeting civilians",
+    "human shields",
+    "torture of prisoners",
+    "international criminal court",
+    "rome statute",
+    "geneva convention",
+    "icc arrest warrant",
+];
 
 /// The topic taxonomy has no history topic, so history is read off the text instead. Both lists
 /// are deliberately domain-bound: words that are about the past on their own, rather than words
@@ -282,6 +311,10 @@ impl FeedPolicyScorer {
             && Self::text_has_signal(candidate, &HISTORY_TERMS, &HISTORY_PHRASES)
     }
 
+    fn is_war_crimes_coverage(candidate: &PostCandidate) -> bool {
+        Self::text_has_signal(candidate, &WAR_CRIMES_TERMS, &WAR_CRIMES_PHRASES)
+    }
+
     fn is_philosophy(candidate: &PostCandidate) -> bool {
         Self::text_has_signal(candidate, &PHILOSOPHY_TERMS, &PHILOSOPHY_PHRASES)
     }
@@ -338,8 +371,8 @@ impl FeedPolicyScorer {
         .fold(1.0, f64::min)
     }
 
-    /// Boosts STEM and the interest set, reduces sports, fan culture and the low-signal set.
-    /// Independent of the hard-news boost, which keeps its own weight.
+    /// Boosts STEM, war-crimes coverage and the interest set; reduces sports, fan culture and the
+    /// low-signal set. Independent of the hard-news boost, which keeps its own weight.
     fn category_weight(candidate: &PostCandidate) -> f64 {
         let stem_weight = if Self::has_topic(candidate, STEM_TOPIC_IDS) {
             STEM_WEIGHT_FACTOR
@@ -356,10 +389,16 @@ impl FeedPolicyScorer {
         } else {
             1.0
         };
+        let war_crimes_weight = if Self::is_war_crimes_coverage(candidate) {
+            WAR_CRIMES_COVERAGE_WEIGHT_FACTOR
+        } else {
+            1.0
+        };
 
         stem_weight
             * sports_weight
             * fandom_weight
+            * war_crimes_weight
             * Self::interest_weight(candidate)
             * Self::low_signal_weight(candidate)
     }
@@ -529,7 +568,8 @@ mod tests {
         OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR, PHILOSOPHY_WEIGHT_FACTOR, PLATITUDE_WEIGHT_FACTOR,
         PREDICTED_ENGAGEMENT_SPREAD, RELIGION_WEIGHT_FACTOR, SPORTS_WEIGHT_FACTOR,
         STEM_WEIGHT_FACTOR, TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR, XAI_ART, XAI_CELEBRITY,
-        XAI_MUSIC, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_RELIGION, XAI_SCIENCE,
+        WAR_CRIMES_COVERAGE_WEIGHT_FACTOR, XAI_MUSIC, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_RELIGION,
+        XAI_SCIENCE,
     };
     use crate::models::candidate::PostCandidate;
     use crate::params::topics::{
@@ -569,6 +609,61 @@ mod tests {
         assert!(
             (FeedPolicyScorer::policy_weight(&candidate, None) - expected).abs() < f64::EPSILON
         );
+    }
+
+    #[test]
+    fn war_crimes_coverage_receives_a_targeted_boost() {
+        for text in [
+            "Investigators documented war-crimes in the district",
+            "The inquiry found evidence of crimes against humanity",
+            "Satellite images show newly excavated mass graves",
+            "The ICC arrest warrant cites command responsibility",
+            "Survivors gave evidence of genocide",
+            "The report reviews obligations under the Geneva Conventions",
+        ] {
+            assert_eq!(
+                FeedPolicyScorer::category_weight(&candidate(7, text)),
+                WAR_CRIMES_COVERAGE_WEIGHT_FACTOR,
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn generic_war_updates_do_not_receive_the_war_crimes_boost() {
+        for text in [
+            "Ceasefire talks resumed after overnight fighting",
+            "Troops advanced five kilometres before withdrawing",
+            "The defence ministry announced a change in battlefield command",
+        ] {
+            assert_eq!(
+                FeedPolicyScorer::category_weight(&candidate(7, text)),
+                1.0,
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn hard_news_and_war_crimes_coverage_boosts_stack() {
+        let report = PostCandidate {
+            filtered_topic_ids: Some(vec![XAI_NEWS]),
+            ..candidate(7, "Investigators found evidence of war crimes")
+        };
+
+        assert_eq!(
+            FeedPolicyScorer::policy_weight(&report, None),
+            IN_NETWORK_WEIGHT_FACTOR
+                * HARD_NEWS_WEIGHT_FACTOR
+                * WAR_CRIMES_COVERAGE_WEIGHT_FACTOR
+        );
+    }
+
+    #[test]
+    fn war_crimes_coverage_boost_exceeds_the_standard_news_boost() {
+        const {
+            assert!(WAR_CRIMES_COVERAGE_WEIGHT_FACTOR > HARD_NEWS_WEIGHT_FACTOR)
+        };
     }
 
     #[test]
