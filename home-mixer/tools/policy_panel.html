@@ -515,7 +515,7 @@
 
       <section class="bank">
         <div class="bank-hd"><h2>Category</h2><span class="rule"></span></div>
-        <p class="bank-note">Multiplied together, so a post tagged both sports and fandom takes both cuts. Hard news stacks on top of everything. Art, music, nature and history are one preference in four parts &mdash; a post spanning them takes the largest of the four, not their product. History is matched on vocabulary in the text, and stays off hard news.</p>
+        <p class="bank-note">Multiplied together, so a post tagged both sports and fandom takes both cuts. Hard news stacks on top of everything. Art, music, nature and history are one boost in four parts. Religion, philosophy and platitude posting are one cut in three parts. Within either group, an overlap takes only the strongest single weight. Text matching is conservative; history stays off hard news.</p>
         <div class="knobs" id="bank-category"></div>
       </section>
 
@@ -590,6 +590,9 @@
     stem:        1.25,
     sports:      0.6,
     fandom:      0.6,
+    religion:    0.6,
+    philosophy:  0.6,
+    platitude:   0.6,
     art:         1.4,
     music:       1.4,
     nature:      1.4,
@@ -614,6 +617,9 @@
     { key: "stem",       bank: "bank-category", label: "STEM",         min: 0,   max: 3,   step: 0.05, unit: "x" },
     { key: "sports",     bank: "bank-category", label: "Sports",       min: 0,   max: 2,   step: 0.05, unit: "x" },
     { key: "fandom",     bank: "bank-category", label: "Fandom",       min: 0,   max: 2,   step: 0.05, unit: "x" },
+    { key: "religion",   bank: "bank-category", label: "Religion",     min: 0,   max: 1,   step: 0.05, unit: "x" },
+    { key: "philosophy", bank: "bank-category", label: "Philosophy",   min: 0,   max: 1,   step: 0.05, unit: "x" },
+    { key: "platitude",  bank: "bank-category", label: "Platitudes",   min: 0,   max: 1,   step: 0.05, unit: "x" },
     { key: "art",        bank: "bank-category", label: "Art",          min: 0,   max: 3,   step: 0.05, unit: "x" },
     { key: "music",      bank: "bank-category", label: "Music",        min: 0,   max: 3,   step: 0.05, unit: "x" },
     { key: "nature",     bank: "bank-category", label: "Nature",       min: 0,   max: 3,   step: 0.05, unit: "x" },
@@ -689,13 +695,23 @@
       topics: [], history: true },
     { id: 21, author: "Frontline Wire", handle: "frontlinewire", inNet: false, phoenix: 0.74,
       text: "Civil war fighting reached the capital overnight, according to two aid groups.",
-      topics: ["news"], history: true }
+      topics: ["news"], history: true },
+    { id: 22, author: "Sunday Notes", handle: "sundaynotes", inNet: true, phoenix: 0.66,
+      text: "A reading on grace, doubt, and the life of faith.",
+      topics: ["religion", "christianity"] },
+    { id: 23, author: "The Examined Feed", handle: "examinedfeed", inNet: true, phoenix: 0.63,
+      text: "Does the ship of Theseus remain the same object after the last plank is replaced?",
+      topics: [], philosophy: true },
+    { id: 24, author: "Daily Reminder", handle: "dailyreminder", inNet: true, phoenix: 0.68,
+      text: "Believe in yourself. Protect your peace. Know your worth.",
+      topics: [], platitude: true }
   ];
 
   var HARD_NEWS = ["news", "elections", "politics", "crime", "stocks", "disasters"];
   var STEM      = ["science", "space", "software", "ai", "robotics", "biotech", "education"];
   var SPORTS    = ["sports", "nba", "soccer", "nfl", "mlb", "tennis"];
   var FANDOM    = ["celebrity", "movies", "anime", "kpop", "memes", "streaming"];
+  var RELIGION  = ["religion", "christianity", "buddhism", "hinduism", "islam", "judaism"];
   // Roots and everything that rolls up to them, matching TopicIdExpansion::supertopic.
   var ART       = ["art", "photography", "design", "digitalart"];
   var MUSIC     = ["music", "pop", "kpop", "jpop", "rock", "jazz", "hiphop", "country", "electronic", "concerts"];
@@ -876,6 +892,19 @@
     if (hasAny(p, STEM))      { w *= state.stem;     parts.push({ name: "stem",      v: state.stem }); }
     if (hasAny(p, SPORTS))    { w *= state.sports;   parts.push({ name: "sports",    v: state.sports }); }
     if (hasAny(p, FANDOM))    { w *= state.fandom;   parts.push({ name: "fandom",    v: state.fandom }); }
+
+    // The smallest of the three, applied once, mirrors FeedPolicyScorer::low_signal_weight.
+    var lowSignal = { name: null, v: 1 };
+    [{ name: "religion", hit: hasAny(p, RELIGION), v: state.religion },
+     { name: "philosophy", hit: p.philosophy, v: state.philosophy },
+     { name: "platitude", hit: p.platitude, v: state.platitude }]
+    .forEach(function (c) {
+      if (c.hit && c.v < lowSignal.v) lowSignal = c;
+    });
+    if (lowSignal.name) {
+      w *= lowSignal.v;
+      parts.push({ name: lowSignal.name, v: lowSignal.v });
+    }
 
     // The largest of the four, applied once, never below 1: mirrors
     // FeedPolicyScorer::interest_weight, which folds the matching factors with max from 1.
@@ -1060,6 +1089,9 @@
       c("STEM_WEIGHT_FACTOR", state.stem),
       c("SPORTS_WEIGHT_FACTOR", state.sports),
       c("FANDOM_WEIGHT_FACTOR", state.fandom),
+      c("RELIGION_WEIGHT_FACTOR", state.religion),
+      c("PHILOSOPHY_WEIGHT_FACTOR", state.philosophy),
+      c("PLATITUDE_WEIGHT_FACTOR", state.platitude),
       c("ART_WEIGHT_FACTOR", state.art),
       c("MUSIC_WEIGHT_FACTOR", state.music),
       c("NATURE_WEIGHT_FACTOR", state.nature),

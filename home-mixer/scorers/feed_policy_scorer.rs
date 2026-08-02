@@ -4,8 +4,9 @@ use crate::models::query::ScoredPostsQuery;
 use crate::params::topics::{
     XAI_AI, XAI_ANIME, XAI_ART, XAI_BIOTECH, XAI_CELEBRITY, XAI_CRIME, XAI_EDUCATION,
     XAI_ELECTIONS, XAI_J_POP, XAI_K_POP, XAI_MEMES, XAI_MOVIES_TV, XAI_MUSIC,
-    XAI_NATURAL_DISASTERS, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_POLITICS, XAI_ROBOTICS, XAI_SCIENCE,
-    XAI_SOFTWARE_DEVELOPMENT, XAI_SPACE, XAI_SPORTS_REAL, XAI_STOCKS_ECONOMY, XAI_STREAMING,
+    XAI_NATURAL_DISASTERS, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_POLITICS, XAI_RELIGION, XAI_ROBOTICS,
+    XAI_SCIENCE, XAI_SOFTWARE_DEVELOPMENT, XAI_SPACE, XAI_SPORTS_REAL, XAI_STOCKS_ECONOMY,
+    XAI_STREAMING,
     XAI_TECHNOLOGY, XAI_US_IRAN_WAR,
 };
 use crate::scorers::affiliated_authors;
@@ -24,6 +25,10 @@ const MIN_AUTHOR_POSTS_FOR_TOPIC_RATIO: usize = 4;
 const STEM_WEIGHT_FACTOR: f64 = 1.25;
 const SPORTS_WEIGHT_FACTOR: f64 = 0.6;
 const FANDOM_WEIGHT_FACTOR: f64 = 0.6;
+
+const RELIGION_WEIGHT_FACTOR: f64 = 0.6;
+const PHILOSOPHY_WEIGHT_FACTOR: f64 = 0.6;
+const PLATITUDE_WEIGHT_FACTOR: f64 = 0.6;
 
 const ART_WEIGHT_FACTOR: f64 = 1.4;
 const MUSIC_WEIGHT_FACTOR: f64 = 1.4;
@@ -82,6 +87,64 @@ const HISTORY_PHRASES: [&str; 12] = [
     "industrial revolution",
     "archival footage",
 ];
+
+/// Philosophy has no topic in the taxonomy. Keep this vocabulary specific to the discipline:
+/// broad words such as "meaning", "reason", "thought" and "ethics" would catch ordinary prose.
+const PHILOSOPHY_TERMS: [&str; 15] = [
+    "philosophy",
+    "philosophical",
+    "philosopher",
+    "philosophers",
+    "epistemology",
+    "metaphysics",
+    "ontology",
+    "existentialism",
+    "existentialist",
+    "nihilism",
+    "nihilist",
+    "stoicism",
+    "utilitarianism",
+    "deontology",
+    "phenomenology",
+];
+
+const PHILOSOPHY_PHRASES: [&str; 8] = [
+    "meaning of life",
+    "moral philosophy",
+    "categorical imperative",
+    "veil of ignorance",
+    "existence precedes essence",
+    "mind body problem",
+    "ship of theseus",
+    "trolley problem",
+];
+
+/// Conservative exact phrases for slogan-style inspirational posting. Posts explicitly discussing
+/// clichés or platitudes fail open so criticism and analysis are not mistaken for the thing quoted.
+const PLATITUDE_PHRASES: [&str; 20] = [
+    "everything happens for a reason",
+    "live laugh love",
+    "good vibes only",
+    "it is what it is",
+    "trust the process",
+    "never give up",
+    "believe in yourself",
+    "follow your dreams",
+    "choose happiness",
+    "stay positive",
+    "no pain no gain",
+    "work hard in silence",
+    "let that sink in",
+    "read that again",
+    "you only live once",
+    "be the change",
+    "when one door closes",
+    "you are enough",
+    "protect your peace",
+    "know your worth",
+];
+
+const PLATITUDE_CRITIQUE_TERMS: [&str; 4] = ["cliche", "cliché", "platitude", "platitudes"];
 
 /// Posts from accounts carrying an X / xAI / Tesla / SpaceX affiliate badge are deranked, not
 /// removed: this is a preference about how much of the feed these accounts should occupy, and a
@@ -194,18 +257,47 @@ impl FeedPolicyScorer {
         })
     }
 
+    fn text_has_signal(candidate: &PostCandidate, terms: &[&str], phrases: &[&str]) -> bool {
+        let text = candidate.tweet_text.to_lowercase();
+        let words: Vec<&str> = text
+            .split(|character: char| !character.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        let normalized = words.join(" ");
+
+        words.iter().any(|word| terms.contains(word))
+            || phrases.iter().any(|phrase| normalized.contains(phrase))
+    }
+
     /// Whole-word match against the history vocabulary, with phrases matched as written. Hard
     /// news is exempt: a report on a war being fought now borrows the same words as an account of
     /// one that ended eighty years ago, and only one of the two is history.
     fn is_history(candidate: &PostCandidate) -> bool {
-        if Self::is_hard_news(candidate) {
+        !Self::is_hard_news(candidate)
+            && Self::text_has_signal(candidate, &HISTORY_TERMS, &HISTORY_PHRASES)
+    }
+
+    fn is_philosophy(candidate: &PostCandidate) -> bool {
+        Self::text_has_signal(candidate, &PHILOSOPHY_TERMS, &PHILOSOPHY_PHRASES)
+    }
+
+    fn is_platitude(candidate: &PostCandidate) -> bool {
+        let text = candidate.tweet_text.to_lowercase();
+        let words: Vec<&str> = text
+            .split(|character: char| !character.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        if words
+            .iter()
+            .any(|word| PLATITUDE_CRITIQUE_TERMS.contains(word))
+        {
             return false;
         }
 
-        let text = candidate.tweet_text.to_lowercase();
-        text.split(|character: char| !character.is_alphanumeric())
-            .any(|token| HISTORY_TERMS.contains(&token))
-            || HISTORY_PHRASES.iter().any(|phrase| text.contains(phrase))
+        let normalized = words.join(" ");
+        PLATITUDE_PHRASES
+            .iter()
+            .any(|phrase| normalized.contains(phrase))
     }
 
     /// Art, music, nature and history: what people make, where they go and where they came from,
@@ -227,8 +319,22 @@ impl FeedPolicyScorer {
             .fold(1.0, f64::max)
     }
 
-    /// Boosts STEM and the interest set, reduces sports and fan culture. Independent of the
-    /// hard-news boost, which keeps its own weight.
+    /// Religion, philosophy and slogan-style platitudes are one downranking preference in three
+    /// forms. Take the strongest single cut instead of multiplying overlaps: a philosophical
+    /// religious platitude should not be buried three times for expressing the same preference.
+    fn low_signal_weight(candidate: &PostCandidate) -> f64 {
+        [
+            Self::has_cluster(candidate, XAI_RELIGION).then_some(RELIGION_WEIGHT_FACTOR),
+            Self::is_philosophy(candidate).then_some(PHILOSOPHY_WEIGHT_FACTOR),
+            Self::is_platitude(candidate).then_some(PLATITUDE_WEIGHT_FACTOR),
+        ]
+        .into_iter()
+        .flatten()
+        .fold(1.0, f64::min)
+    }
+
+    /// Boosts STEM and the interest set, reduces sports, fan culture and the low-signal set.
+    /// Independent of the hard-news boost, which keeps its own weight.
     fn category_weight(candidate: &PostCandidate) -> f64 {
         let stem_weight = if Self::has_topic(candidate, STEM_TOPIC_IDS) {
             STEM_WEIGHT_FACTOR
@@ -246,7 +352,11 @@ impl FeedPolicyScorer {
             1.0
         };
 
-        stem_weight * sports_weight * fandom_weight * Self::interest_weight(candidate)
+        stem_weight
+            * sports_weight
+            * fandom_weight
+            * Self::interest_weight(candidate)
+            * Self::low_signal_weight(candidate)
     }
 
     fn badge_bucket(candidate: &PostCandidate) -> &'static str {
@@ -404,11 +514,14 @@ mod tests {
         FANDOM_WEIGHT_FACTOR, FeedPolicyScorer, HARD_NEWS_WEIGHT_FACTOR, HISTORY_WEIGHT_FACTOR,
         IN_NETWORK_WEIGHT_FACTOR, MUSIC_WEIGHT_FACTOR, NATURE_WEIGHT_FACTOR,
         OUT_OF_NETWORK_WEIGHT_FACTOR, OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR,
-        PREDICTED_ENGAGEMENT_SPREAD, SPORTS_WEIGHT_FACTOR, STEM_WEIGHT_FACTOR, XAI_ART,
-        XAI_CELEBRITY, XAI_MUSIC, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_SCIENCE,
+        PHILOSOPHY_WEIGHT_FACTOR, PLATITUDE_WEIGHT_FACTOR, PREDICTED_ENGAGEMENT_SPREAD,
+        RELIGION_WEIGHT_FACTOR, SPORTS_WEIGHT_FACTOR, STEM_WEIGHT_FACTOR, XAI_ART, XAI_CELEBRITY,
+        XAI_MUSIC, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_RELIGION, XAI_SCIENCE,
     };
     use crate::models::candidate::PostCandidate;
-    use crate::params::topics::{XAI_K_POP, XAI_NBA, XAI_PHOTOGRAPHY, XAI_ROCK, XAI_SOCCER};
+    use crate::params::topics::{
+        XAI_CHRISTIANITY, XAI_K_POP, XAI_NBA, XAI_PHOTOGRAPHY, XAI_ROCK, XAI_SOCCER,
+    };
 
     #[test]
     fn followed_accounts_receive_double_weight() {
@@ -692,6 +805,97 @@ mod tests {
 
         assert_eq!(weight, MUSIC_WEIGHT_FACTOR * FANDOM_WEIGHT_FACTOR);
         assert!(weight < 1.0);
+    }
+
+    #[test]
+    fn religion_and_its_subtopics_are_reduced() {
+        for topic_id in [XAI_RELIGION, XAI_CHRISTIANITY] {
+            assert_eq!(
+                FeedPolicyScorer::category_weight(&topical(topic_id)),
+                RELIGION_WEIGHT_FACTOR,
+                "topic {topic_id}"
+            );
+        }
+    }
+
+    #[test]
+    fn philosophy_vocabulary_is_reduced() {
+        for text in [
+            "A short introduction to epistemology and what counts as knowledge",
+            "The trolley problem is less useful than its clean setup suggests",
+            "A philosopher compares deontology with utilitarianism",
+            "Does the ship of Theseus remain the same object?",
+        ] {
+            assert_eq!(
+                FeedPolicyScorer::category_weight(&candidate(7, text)),
+                PHILOSOPHY_WEIGHT_FACTOR,
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn platitude_phrases_are_reduced() {
+        for text in [
+            "Everything happens for a reason",
+            "Live, laugh, love",
+            "Your morning reminder: believe in yourself",
+            "Protect your peace. Know your worth.",
+            "When one door closes, another one opens",
+        ] {
+            assert_eq!(
+                FeedPolicyScorer::category_weight(&candidate(7, text)),
+                PLATITUDE_WEIGHT_FACTOR,
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn ordinary_prose_and_criticism_are_not_reduced() {
+        for text in [
+            "The ethics review board approved the revised protocol",
+            "The reason the build failed was a stale lockfile",
+            "A retrospective on why 'never give up' became a cliché",
+            "This essay criticizes the platitude that everything happens for a reason",
+        ] {
+            assert_eq!(
+                FeedPolicyScorer::category_weight(&candidate(7, text)),
+                1.0,
+                "{text}"
+            );
+        }
+    }
+
+    #[test]
+    fn overlapping_low_signal_labels_take_only_one_cut() {
+        let overlap = PostCandidate {
+            filtered_topic_ids: Some(vec![XAI_RELIGION]),
+            ..candidate(
+                7,
+                "A philosopher on epistemology: believe in yourself and trust the process",
+            )
+        };
+        let strongest = RELIGION_WEIGHT_FACTOR
+            .min(PHILOSOPHY_WEIGHT_FACTOR)
+            .min(PLATITUDE_WEIGHT_FACTOR);
+
+        assert_eq!(FeedPolicyScorer::category_weight(&overlap), strongest);
+        assert!(strongest > RELIGION_WEIGHT_FACTOR * PHILOSOPHY_WEIGHT_FACTOR);
+    }
+
+    #[test]
+    fn the_new_factors_are_downranks() {
+        const {
+            assert!(
+                RELIGION_WEIGHT_FACTOR > 0.0
+                    && RELIGION_WEIGHT_FACTOR < 1.0
+                    && PHILOSOPHY_WEIGHT_FACTOR > 0.0
+                    && PHILOSOPHY_WEIGHT_FACTOR < 1.0
+                    && PLATITUDE_WEIGHT_FACTOR > 0.0
+                    && PLATITUDE_WEIGHT_FACTOR < 1.0
+            )
+        };
     }
 
     #[test]
