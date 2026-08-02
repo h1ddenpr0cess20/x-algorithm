@@ -515,7 +515,7 @@
 
       <section class="bank">
         <div class="bank-hd"><h2>Category</h2><span class="rule"></span></div>
-        <p class="bank-note">Multiplied together, so a post tagged both sports and fandom takes both cuts. Hard news stacks on top of everything. Art, music, nature and history are one boost in four parts. Religion, philosophy and platitude posting are one cut in three parts. Within either group, an overlap takes only the strongest single weight. Text matching is conservative; history stays off hard news.</p>
+        <p class="bank-note">Multiplied together, so a post tagged both sports and fandom takes both cuts. Hard news stacks on top of everything. War-crimes coverage gets an additional boost only when specific atrocity or international-law language is present; generic war updates do not qualify. Art, music, nature and history are one boost in four parts. Religion, philosophy and platitude posting are one cut in three parts. Within either group, an overlap takes only the strongest single weight. Text matching is conservative; history stays off hard news.</p>
         <div class="knobs" id="bank-category"></div>
       </section>
 
@@ -587,6 +587,7 @@
     inNetwork:   2.0,
     outNetwork:  0.1,
     hardNews:    1.5,
+    warCrimes:   1.75,
     stem:        1.25,
     sports:      0.6,
     fandom:      0.6,
@@ -616,6 +617,7 @@
     { key: "inNetwork",  bank: "bank-network",  label: "In-network",   min: 0,   max: 4,   step: 0.05, unit: "x" },
     { key: "outNetwork", bank: "bank-network",  label: "Out-of-network", min: 0, max: 2,   step: 0.05, unit: "x" },
     { key: "hardNews",   bank: "bank-category", label: "Hard news",    min: 0,   max: 3,   step: 0.05, unit: "x" },
+    { key: "warCrimes",  bank: "bank-category", label: "War crimes",   min: 1,   max: 3,   step: 0.05, unit: "x" },
     { key: "stem",       bank: "bank-category", label: "STEM",         min: 0,   max: 3,   step: 0.05, unit: "x" },
     { key: "sports",     bank: "bank-category", label: "Sports",       min: 0,   max: 2,   step: 0.05, unit: "x" },
     { key: "fandom",     bank: "bank-category", label: "Fandom",       min: 0,   max: 2,   step: 0.05, unit: "x" },
@@ -714,7 +716,10 @@
       topics: ["politics"], trumpAdmin: true },
     { id: 26, author: "10 Downing Street", handle: "10downingstreet", inNet: false, phoenix: 0.72,
       text: "An official foreign-government announcement.",
-      topics: ["politics"], foreignGovernment: true }
+      topics: ["politics"], foreignGovernment: true },
+    { id: 27, author: "Atrocity Documentation Desk", handle: "atrocitydesk", inNet: false, phoenix: 0.67,
+      text: "Investigators documented mass graves and possible crimes against humanity.",
+      topics: ["news"], warCrimes: true }
   ];
 
   var HARD_NEWS = ["news", "elections", "politics", "crime", "stocks", "disasters"];
@@ -899,6 +904,7 @@
     parts.push({ name: p.inNet ? "in-net" : "oon", v: w, kind: "net" });
 
     if (hasAny(p, HARD_NEWS)) { w *= state.hardNews; parts.push({ name: "hard news", v: state.hardNews }); }
+    if (p.warCrimes)           { w *= state.warCrimes; parts.push({ name: "war crimes", v: state.warCrimes }); }
     if (hasAny(p, STEM))      { w *= state.stem;     parts.push({ name: "stem",      v: state.stem }); }
     if (hasAny(p, SPORTS))    { w *= state.sports;   parts.push({ name: "sports",    v: state.sports }); }
     if (hasAny(p, FANDOM))    { w *= state.fandom;   parts.push({ name: "fandom",    v: state.fandom }); }
@@ -1104,6 +1110,7 @@
       c("IN_NETWORK_WEIGHT_FACTOR", state.inNetwork),
       c("OUT_OF_NETWORK_WEIGHT_FACTOR", state.outNetwork),
       c("HARD_NEWS_WEIGHT_FACTOR", state.hardNews),
+      c("WAR_CRIMES_COVERAGE_WEIGHT_FACTOR", state.warCrimes),
       c("STEM_WEIGHT_FACTOR", state.stem),
       c("SPORTS_WEIGHT_FACTOR", state.sports),
       c("FANDOM_WEIGHT_FACTOR", state.fandom),
