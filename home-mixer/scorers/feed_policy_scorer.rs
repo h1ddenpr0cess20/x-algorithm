@@ -259,9 +259,14 @@ impl FeedPolicyScorer {
 
     fn text_has_signal(candidate: &PostCandidate, terms: &[&str], phrases: &[&str]) -> bool {
         let text = candidate.tweet_text.to_lowercase();
-        text.split(|character: char| !character.is_alphanumeric())
-            .any(|token| terms.contains(&token))
-            || phrases.iter().any(|phrase| text.contains(phrase))
+        let words: Vec<&str> = text
+            .split(|character: char| !character.is_alphanumeric())
+            .filter(|word| !word.is_empty())
+            .collect();
+        let normalized = words.join(" ");
+
+        words.iter().any(|word| terms.contains(word))
+            || phrases.iter().any(|phrase| normalized.contains(phrase))
     }
 
     /// Whole-word match against the history vocabulary, with phrases matched as written. Hard
@@ -278,16 +283,21 @@ impl FeedPolicyScorer {
 
     fn is_platitude(candidate: &PostCandidate) -> bool {
         let text = candidate.tweet_text.to_lowercase();
-        if text
+        let words: Vec<&str> = text
             .split(|character: char| !character.is_alphanumeric())
-            .any(|token| PLATITUDE_CRITIQUE_TERMS.contains(&token))
+            .filter(|word| !word.is_empty())
+            .collect();
+        if words
+            .iter()
+            .any(|word| PLATITUDE_CRITIQUE_TERMS.contains(word))
         {
             return false;
         }
 
+        let normalized = words.join(" ");
         PLATITUDE_PHRASES
             .iter()
-            .any(|phrase| text.contains(phrase))
+            .any(|phrase| normalized.contains(phrase))
     }
 
     /// Art, music, nature and history: what people make, where they go and where they came from,
@@ -828,6 +838,7 @@ mod tests {
     fn platitude_phrases_are_reduced() {
         for text in [
             "Everything happens for a reason",
+            "Live, laugh, love",
             "Your morning reminder: believe in yourself",
             "Protect your peace. Know your worth.",
             "When one door closes, another one opens",
