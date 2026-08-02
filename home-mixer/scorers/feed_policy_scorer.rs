@@ -9,7 +9,7 @@ use crate::params::topics::{
     XAI_STREAMING,
     XAI_TECHNOLOGY, XAI_US_IRAN_WAR,
 };
-use crate::scorers::affiliated_authors;
+use crate::scorers::{affiliated_authors, government_authors};
 use std::collections::HashMap;
 use tonic::async_trait;
 use xai_candidate_pipeline::scorer::Scorer;
@@ -150,6 +150,11 @@ const PLATITUDE_CRITIQUE_TERMS: [&str; 4] = ["cliche", "cliché", "platitude", "
 /// removed: this is a preference about how much of the feed these accounts should occupy, and a
 /// weight says that where a hard removal would overstate it.
 const AFFILIATED_AUTHOR_WEIGHT_FACTOR: f64 = 0.25;
+
+/// Exact official-account and affiliate-badge matches. These are preferences about how much
+/// institutional posting occupies the feed, so candidates are downranked rather than removed.
+const TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR: f64 = 0.25;
+const FOREIGN_GOVERNMENT_AUTHOR_WEIGHT_FACTOR: f64 = 0.25;
 
 /// Tagged by the organization the badge points at, or `other` for a badge from anywhere else, or
 /// `none` for a post whose author carries no badge. The `none` bucket is the point: it separates
@@ -389,14 +394,21 @@ impl FeedPolicyScorer {
         }
     }
 
-    /// Derank accounts an affiliated organization has badged. Reposts count: the badge is about
-    /// whose content is being carried, not who pressed the button.
+    /// Apply the strongest single author-level cut. A government account that also carries one of
+    /// the existing organization badges should not be multiplied into near-removal. Reposts count:
+    /// the rule follows the content being carried, not who pressed the button.
     fn author_weight(candidate: &PostCandidate) -> f64 {
-        if affiliated_authors::is_affiliated(candidate) {
-            AFFILIATED_AUTHOR_WEIGHT_FACTOR
-        } else {
-            1.0
-        }
+        [
+            affiliated_authors::is_affiliated(candidate)
+                .then_some(AFFILIATED_AUTHOR_WEIGHT_FACTOR),
+            government_authors::is_trump_administration(candidate)
+                .then_some(TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR),
+            government_authors::is_foreign_government(candidate)
+                .then_some(FOREIGN_GOVERNMENT_AUTHOR_WEIGHT_FACTOR),
+        ]
+        .into_iter()
+        .flatten()
+        .fold(1.0, f64::min)
     }
 
     fn mentions_elon_musk(text: &str) -> bool {
@@ -511,11 +523,12 @@ impl Scorer<ScoredPostsQuery, PostCandidate> for FeedPolicyScorer {
 mod tests {
     use super::{
         AFFILIATED_AUTHOR_WEIGHT_FACTOR, ART_WEIGHT_FACTOR, ELON_MENTION_RATIO_THRESHOLD,
-        FANDOM_WEIGHT_FACTOR, FeedPolicyScorer, HARD_NEWS_WEIGHT_FACTOR, HISTORY_WEIGHT_FACTOR,
-        IN_NETWORK_WEIGHT_FACTOR, MUSIC_WEIGHT_FACTOR, NATURE_WEIGHT_FACTOR,
-        OUT_OF_NETWORK_WEIGHT_FACTOR, OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR,
-        PHILOSOPHY_WEIGHT_FACTOR, PLATITUDE_WEIGHT_FACTOR, PREDICTED_ENGAGEMENT_SPREAD,
-        RELIGION_WEIGHT_FACTOR, SPORTS_WEIGHT_FACTOR, STEM_WEIGHT_FACTOR, XAI_ART, XAI_CELEBRITY,
+        FANDOM_WEIGHT_FACTOR, FOREIGN_GOVERNMENT_AUTHOR_WEIGHT_FACTOR, FeedPolicyScorer,
+        HARD_NEWS_WEIGHT_FACTOR, HISTORY_WEIGHT_FACTOR, IN_NETWORK_WEIGHT_FACTOR,
+        MUSIC_WEIGHT_FACTOR, NATURE_WEIGHT_FACTOR, OUT_OF_NETWORK_WEIGHT_FACTOR,
+        OVEREXPOSED_ELON_TOPIC_WEIGHT_FACTOR, PHILOSOPHY_WEIGHT_FACTOR, PLATITUDE_WEIGHT_FACTOR,
+        PREDICTED_ENGAGEMENT_SPREAD, RELIGION_WEIGHT_FACTOR, SPORTS_WEIGHT_FACTOR,
+        STEM_WEIGHT_FACTOR, TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR, XAI_ART, XAI_CELEBRITY,
         XAI_MUSIC, XAI_NATURE_OUTDOORS, XAI_NEWS, XAI_RELIGION, XAI_SCIENCE,
     };
     use crate::models::candidate::PostCandidate;
@@ -894,6 +907,73 @@ mod tests {
                     && PHILOSOPHY_WEIGHT_FACTOR < 1.0
                     && PLATITUDE_WEIGHT_FACTOR > 0.0
                     && PLATITUDE_WEIGHT_FACTOR < 1.0
+            )
+        };
+    }
+
+    #[test]
+    fn trump_administration_accounts_are_deranked() {
+        let post = PostCandidate {
+            author_screen_name: Some("WhiteHouse".to_string()),
+            ..candidate(7, "an official announcement")
+        };
+
+        assert_eq!(
+            FeedPolicyScorer::policy_weight(&post, None),
+            IN_NETWORK_WEIGHT_FACTOR * TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR
+        );
+    }
+
+    #[test]
+    fn foreign_government_accounts_and_affiliates_are_deranked() {
+        let direct = PostCandidate {
+            author_screen_name: Some("CanadianPM".to_string()),
+            ..candidate(7, "an official announcement")
+        };
+        let affiliate = PostCandidate {
+            author_screen_name: Some("a_diplomat".to_string()),
+            author_affiliate_handle: Some("10DowningStreet".to_string()),
+            ..candidate(7, "an official announcement")
+        };
+
+        for post in [direct, affiliate] {
+            assert_eq!(
+                FeedPolicyScorer::policy_weight(&post, None),
+                IN_NETWORK_WEIGHT_FACTOR * FOREIGN_GOVERNMENT_AUTHOR_WEIGHT_FACTOR
+            );
+        }
+    }
+
+    #[test]
+    fn author_deranks_take_the_strongest_single_cut() {
+        let post = PostCandidate {
+            author_screen_name: Some("POTUS".to_string()),
+            author_affiliate_handle: Some("xai".to_string()),
+            ..candidate(7, "an announcement")
+        };
+        let strongest = AFFILIATED_AUTHOR_WEIGHT_FACTOR
+            .min(TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR)
+            .min(FOREIGN_GOVERNMENT_AUTHOR_WEIGHT_FACTOR);
+
+        assert_eq!(
+            FeedPolicyScorer::policy_weight(&post, None),
+            IN_NETWORK_WEIGHT_FACTOR * strongest
+        );
+        assert!(
+            strongest
+                > AFFILIATED_AUTHOR_WEIGHT_FACTOR
+                    * TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR
+        );
+    }
+
+    #[test]
+    fn government_factors_are_downranks() {
+        const {
+            assert!(
+                TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR > 0.0
+                    && TRUMP_ADMINISTRATION_AUTHOR_WEIGHT_FACTOR < 1.0
+                    && FOREIGN_GOVERNMENT_AUTHOR_WEIGHT_FACTOR > 0.0
+                    && FOREIGN_GOVERNMENT_AUTHOR_WEIGHT_FACTOR < 1.0
             )
         };
     }
