@@ -90,7 +90,7 @@ fn is_listed(handle: &str, roster: &[&str]) -> bool {
     roster.contains(&normalized.as_str())
 }
 
-fn screen_names(candidate: &PostCandidate) -> impl Iterator<Item = &str> {
+fn screen_names(candidate: &PostCandidate) -> impl Iterator<Item = &str> + '_ {
     [
         candidate.author_screen_name.as_deref(),
         candidate.retweeted_screen_name.as_deref(),
@@ -99,7 +99,7 @@ fn screen_names(candidate: &PostCandidate) -> impl Iterator<Item = &str> {
     .flatten()
 }
 
-fn affiliate_handles(candidate: &PostCandidate) -> impl Iterator<Item = &str> {
+fn affiliate_handles(candidate: &PostCandidate) -> impl Iterator<Item = &str> + '_ {
     [
         candidate.author_affiliate_handle.as_deref(),
         candidate.retweeted_affiliate_handle.as_deref(),
@@ -148,6 +148,10 @@ mod tests {
         for handle in &all {
             assert_eq!(*handle, normalize(handle), "{handle}");
         }
+        assert!(
+            FOREIGN_GOVERNMENT_HANDLES.len() >= 40,
+            "the seeded foreign-government roster was unexpectedly narrowed"
+        );
         all.sort_unstable();
         assert!(
             all.windows(2).all(|pair| pair[0] != pair[1]),
