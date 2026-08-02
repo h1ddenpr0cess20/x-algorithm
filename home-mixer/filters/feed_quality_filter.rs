@@ -15,7 +15,8 @@ const RESTRICTED_SCREEN_NAMES: [&str; 7] = [
     "wholemars",
     "sawyermerritt",
     "teslaownerssv",
-    "nikitabier"
+    "nikitabier",
+    "Nate_Esparza"
 ];
 
 const ENGAGEMENT_BAIT_PHRASES: [&str; 9] = [
