@@ -139,9 +139,11 @@ mod tests {
 
     #[test]
     fn every_roster_entry_is_normalized_and_unique() {
-        let mut all = Vec::new();
-        all.extend(TRUMP_ADMINISTRATION_HANDLES);
-        all.extend(FOREIGN_GOVERNMENT_HANDLES);
+        let mut all: Vec<&str> = TRUMP_ADMINISTRATION_HANDLES
+            .iter()
+            .chain(FOREIGN_GOVERNMENT_HANDLES)
+            .copied()
+            .collect();
 
         for handle in &all {
             assert_eq!(*handle, normalize(handle), "{handle}");
